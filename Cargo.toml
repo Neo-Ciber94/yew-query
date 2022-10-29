@@ -1,8 +1,9 @@
 [package]
 name = "yew-query"
-version = "0.1.0"
+description = "A future data observed for yew inspired in React Query"
+license = "MIT"
+version = "0.1.0-alpha"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
+yew = { git = "https://github.com/yewstack/yew", rev = "da09755" }
