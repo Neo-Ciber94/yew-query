@@ -6,4 +6,4 @@ version = "0.1.0-alpha"
 edition = "2021"
 
 [dependencies]
-yew = { git = "https://github.com/yewstack/yew", rev = "da09755" }
+yew = "0.19.3"
