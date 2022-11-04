@@ -17,6 +17,10 @@ impl<C> QueryClient<C>
 where
     C: QueryCache,
 {
+    pub fn builder() -> QueryClientBuilder {
+        QueryClientBuilder::new()
+    }
+
     pub async fn fetch_query<F, Fut, T, E>(&mut self, key: Key, f: F) -> Result<&T, Error>
     where
         F: Fn() -> Fut + 'static,
@@ -112,6 +116,45 @@ where
     pub fn invalidate_query_data(&mut self, key: &Key) {
         if let Some(entry) = self.cache.get_mut(key) {
             entry.cache_value = None;
+        }
+    }
+}
+
+#[derive(Default)]
+pub struct QueryClientBuilder {
+    stale_time: Option<Duration>,
+    retry: Option<Retrier>,
+}
+
+impl QueryClientBuilder {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn stale_time(mut self, stale_time: Duration) -> Self {
+        self.stale_time = Some(stale_time);
+        self
+    }
+
+    pub fn retry<R, I>(mut self, retry: R) -> Self
+    where
+        R: Fn() -> I + 'static,
+        I: Iterator<Item = Duration> + 'static,
+    {
+        self.retry = Some(Retrier::new(retry));
+        self
+    }
+
+    pub fn build<C>(self, cache: C) -> QueryClient<C>
+    where
+        C: QueryCache,
+    {
+        let Self { stale_time, retry } = self;
+
+        QueryClient {
+            cache,
+            stale_time,
+            retry,
         }
     }
 }
