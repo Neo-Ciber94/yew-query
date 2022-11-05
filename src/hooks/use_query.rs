@@ -1,6 +1,5 @@
 use std::{cell::Cell, convert::Infallible, ops::Deref, rc::Rc};
-
-use futures::{Future, FutureExt};
+use futures::Future;
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{AbortController, AbortSignal};
 use yew::{use_effect_with_deps, use_state, virtual_dom::Key, UseStateHandle};
@@ -114,47 +113,54 @@ impl<T> Deref for UseQueryHandle<T> {
     }
 }
 
-pub fn use_query<F, Fut>(key: Key, fetcher: F) -> UseQueryHandle<Fut::Output>
+pub fn use_query<F, Fut, T>(key: Key, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn() -> Fut + 'static,
-    Fut: Future + 'static,
+    Fut: Future<Output = T> + 'static,
+    T: 'static,
 {
     use_query_with_options(
         key,
-        UseQueryOptions::new(move || async move {
-            let ret = fetcher().await;
-            Ok::<_, Infallible>(ret)
+        UseQueryOptions::new(move || {
+            let fut = fetcher();
+            async move {
+                let ret = fut.await;
+                Ok::<_, Infallible>(ret)
+            }
         }),
     )
 }
 
-pub fn use_query_with_abort<F, Fut>(key: Key, fetcher: F) -> UseQueryHandle<Fut::Output>
+pub fn use_query_with_signal<F, Fut, T>(key: Key, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn(AbortSignal) -> Fut + 'static,
-    Fut: Future + 'static,
+    Fut: Future<Output = T> + 'static,
+    T: 'static,
 {
-    // use_query_with_options(
-    //     key,
-    //     UseQueryOptions::new_abortable(move |signal| async move {
-    //         let ret = fetcher(signal).await;
-    //         Ok::<_, Infallible>(ret)
-    //     }),
-    // )
-    todo!()
+    use_query_with_options(
+        key,
+        UseQueryOptions::new_abortable(move |signal| {
+            let fut = fetcher(signal);
+            async move {
+                let ret = fut.await;
+                Ok::<_, Infallible>(ret)
+            }
+        }),
+    )
 }
 
 pub fn use_query_with_options<Fut, T, E>(
     key: Key,
     options: UseQueryOptions<Fut, T, E>,
-) -> UseQueryHandle<Fut::Output>
+) -> UseQueryHandle<T>
 where
-    Fut: Future<Output = Result<T, E>>,
+    Fut: Future<Output = Result<T, E>> + 'static,
     T: 'static,
     E: Into<Error> + 'static,
 {
     let UseQueryOptions { disabled, fetch } = options;
     let client = use_query_client().expect("expected `QueryClient`");
-    let state = use_state(|| QueryState::<Fut::Output>::Idle);
+    let state = use_state(|| QueryState::Idle);
     let last_id = use_state(|| Cell::new(0_usize));
 
     {
@@ -189,18 +195,19 @@ where
                 spawn_local(async move {
                     let state = state.clone();
                     let mut client = client.borrow_mut();
-                    let result = client
-                        .fetch_query(key, move || {
-                            fetch(signal.clone()).map(|x| Ok::<_, Infallible>(x))
-                        })
-                        .await
-                        .unwrap();
+                    let result = client.fetch_query(key, move || fetch(signal.clone())).await;
 
                     if id == last_id.get() {
-                        if !disabled {
-                            state.set(QueryState::Ready(result));
-                        } else {
-                            state.set(QueryState::Idle);
+                        match result {
+                            _ if disabled => {
+                                state.set(QueryState::Idle);
+                            }
+                            Ok(x) => {
+                                state.set(QueryState::Ready(x));
+                            }
+                            Err(e) => {
+                                state.set(QueryState::Failed(e));
+                            }
                         }
                     }
                 });
