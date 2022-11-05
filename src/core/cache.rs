@@ -17,6 +17,9 @@ pub trait QueryCache {
     /// Removes and returns the cache entry with the given key.
     fn remove(&mut self, key: &Key) -> Option<Query>;
 
+    /// Returns `true` if the given key is in the cache.
+    fn has(&self, key: &Key) -> bool;
+
     /// Removes all the cache entries.
     fn clear(&mut self);
 }
@@ -36,6 +39,10 @@ impl QueryCache for HashMap<Key, Query> {
 
     fn remove(&mut self, key: &Key) -> Option<Query> {
         self.remove(key)
+    }
+
+    fn has(&self, key: &Key) -> bool {
+        self.contains_key(key)
     }
 
     fn clear(&mut self) {
@@ -58,6 +65,10 @@ impl QueryCache for BTreeMap<Key, Query> {
 
     fn remove(&mut self, key: &Key) -> Option<Query> {
         self.remove(key)
+    }
+
+    fn has(&self, key: &Key) -> bool {
+        self.contains_key(key)
     }
 
     fn clear(&mut self) {

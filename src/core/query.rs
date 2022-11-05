@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{error::Error, fetcher::Fetcher};
+use super::{error::QueryClientError, fetcher::Fetcher};
 
 pub struct Query {
     pub(crate) fetcher: Fetcher<Box<dyn Any>>,
@@ -38,8 +38,11 @@ impl Query {
         }
     }
 
-    pub(crate) fn set_value<T: 'static>(&mut self, value: T) -> Result<(), Error> {
-        assert_eq!(self.type_id, TypeId::of::<T>()); // TODO: Error
+    pub(crate) fn set_value<T: 'static>(&mut self, value: T) -> Result<(), QueryClientError> {
+        if self.type_id != TypeId::of::<T>() {
+            return Err(QueryClientError::type_mismatch::<T>());
+        }
+
         self.cache_value = Some(Box::new(value));
         self.updated_at = Instant::now();
         Ok(())

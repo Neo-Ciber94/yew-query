@@ -1,6 +1,6 @@
 use futures::Future;
 use std::pin::Pin;
-use super::error::Error;
+use super::Error;
 
 pub type TryBoxFuture<T, E = Error> = Pin<Box<dyn Future<Output = Result<T, E>>>>;
 

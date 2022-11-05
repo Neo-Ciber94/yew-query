@@ -1,4 +1,7 @@
-use super::{cache::QueryCache, error::Error, fetcher::Fetcher, query::Query, retry::Retrier};
+use super::{
+    cache::QueryCache, error::QueryClientError, fetcher::Fetcher, query::Query, retry::Retrier,
+    Error,
+};
 use futures::TryFutureExt;
 use std::{
     any::{Any, TypeId},
@@ -18,6 +21,20 @@ impl QueryClient {
         QueryClientBuilder::new()
     }
 
+    pub fn is_stale(&self, key: &Key) -> bool {
+        match (self.cache.get(key), self.stale_time) {
+            (Some(query), Some(stale_time)) => query.is_stale_by_time(stale_time),
+            _ => false,
+        }
+    }
+
+    pub fn is_cached(&self, key: &Key) -> bool {
+        match (self.cache.get(key), self.stale_time) {
+            (Some(query), Some(stale_time)) => query.get_if_not_stale(stale_time).is_some(),
+            _ => false,
+        }
+    }
+
     pub async fn fetch_query<F, Fut, T, E>(&mut self, key: Key, f: F) -> Result<&T, Error>
     where
         F: Fn() -> Fut + 'static,
@@ -26,15 +43,15 @@ impl QueryClient {
         E: Into<Error> + 'static,
     {
         // Get value if cached
-        if let Some(stale_time) = self.stale_time {
-            let ret = self
-                .cache
-                .get(&key)
-                .and_then(|x| x.get_if_not_stale(stale_time))
-                .and_then(|x| x.downcast_ref::<T>())
-                .unwrap();
-
-            return Ok(ret);
+        if self.is_cached(&key) {
+            if let Some(stale_time) = self.stale_time {
+                return Ok(self
+                    .cache
+                    .get(&key)
+                    .and_then(|x| x.get_if_not_stale(stale_time))
+                    .and_then(|x| x.downcast_ref::<T>())
+                    .unwrap());
+            }
         }
 
         let retrier = self.retry.as_ref();
@@ -58,7 +75,7 @@ impl QueryClient {
             .get(&key)
             .and_then(|x| x.cache_value.as_ref())
             .and_then(|x| x.downcast_ref::<T>())
-            .unwrap();
+            .unwrap(); // SAFETY: The value is `T`
 
         Ok(ret)
     }
@@ -94,11 +111,15 @@ impl QueryClient {
             .and_then(|x| x.downcast_ref::<T>())
     }
 
-    pub fn set_query_data<T: 'static>(&mut self, key: Key, value: T) -> Result<(), Error> {
+    pub fn set_query_data<T: 'static>(
+        &mut self,
+        key: Key,
+        value: T,
+    ) -> Result<(), QueryClientError> {
         if let Some(entry) = self.cache.get_mut(&key) {
             entry.set_value(value)
         } else {
-            panic!("key not found");
+            Err(QueryClientError::key_not_found(&key))
         }
     }
 
