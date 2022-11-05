@@ -7,16 +7,13 @@ use std::{
 };
 use yew::virtual_dom::Key;
 
-pub struct QueryClient<C> {
-    cache: C,
+pub struct QueryClient {
+    cache: Box<dyn QueryCache>,
     stale_time: Option<Duration>,
     retry: Option<Retrier>,
 }
 
-impl<C> QueryClient<C>
-where
-    C: QueryCache,
-{
+impl QueryClient {
     pub fn builder() -> QueryClientBuilder {
         QueryClientBuilder::new()
     }
@@ -145,11 +142,12 @@ impl QueryClientBuilder {
         self
     }
 
-    pub fn build<C>(self, cache: C) -> QueryClient<C>
+    pub fn build<C>(self, cache: C) -> QueryClient
     where
-        C: QueryCache,
+        C: QueryCache + 'static,
     {
         let Self { stale_time, retry } = self;
+        let cache = Box::new(cache);
 
         QueryClient {
             cache,
