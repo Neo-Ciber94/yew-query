@@ -11,32 +11,34 @@ pub struct TypeMismatchError(&'static str);
 pub struct KeyNotFoundError(String);
 
 #[derive(Debug)]
-pub enum QueryClientError {
+pub enum QueryError {
     TypeMismatch(TypeMismatchError),
     KeyNotFound(KeyNotFoundError),
+    NoCacheValue,
 }
 
-impl QueryClientError {
+impl QueryError {
     pub(crate) fn type_mismatch<T: 'static>() -> Self {
         let ty = std::any::type_name::<T>();
-        QueryClientError::TypeMismatch(TypeMismatchError(ty))
+        QueryError::TypeMismatch(TypeMismatchError(ty))
     }
 
     pub(crate) fn key_not_found(key: &Key) -> Self {
         let k = key.to_string();
-        QueryClientError::KeyNotFound(KeyNotFoundError(k))
+        QueryError::KeyNotFound(KeyNotFoundError(k))
     }
 }
 
-impl std::error::Error for QueryClientError {}
+impl std::error::Error for QueryError {}
 
-impl Display for QueryClientError {
+impl Display for QueryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        use QueryClientError::*;
+        use QueryError::*;
 
         match self {
             TypeMismatch(TypeMismatchError(s)) => write!(f, "invalid type `{s}`"),
             KeyNotFound(KeyNotFoundError(k)) => write!(f, "key not found `{k}`"),
+            NoCacheValue => write!(f, "no value in cache")
         }
     }
 }

@@ -1,11 +1,11 @@
 use super::{
-    cache::QueryCache, error::QueryClientError, fetcher::Fetcher, query::Query, retry::Retrier,
-    Error,
+    cache::QueryCache, error::QueryError, fetcher::Fetcher, query::Query, retry::Retrier, Error,
 };
 use futures::TryFutureExt;
 use std::{
     any::{Any, TypeId},
     future::Future,
+    rc::Rc,
     time::{Duration, Instant},
 };
 use yew::virtual_dom::Key;
@@ -35,7 +35,7 @@ impl QueryClient {
         }
     }
 
-    pub async fn fetch_query<F, Fut, T, E>(&mut self, key: Key, f: F) -> Result<&T, Error>
+    pub async fn fetch_query<F, Fut, T, E>(&mut self, key: Key, f: F) -> Result<Rc<T>, Error>
     where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
@@ -48,15 +48,16 @@ impl QueryClient {
                 return Ok(self
                     .cache
                     .get(&key)
-                    .and_then(|x| x.get_if_not_stale(stale_time))
-                    .and_then(|x| x.downcast_ref::<T>())
+                    .and_then(|x| x.get_if_not_stale(stale_time).cloned())
+                    .unwrap() // SAFETY: value is cached
+                    .downcast::<T>()
                     .unwrap());
             }
         }
 
         let retrier = self.retry.as_ref();
-        let fetcher = Fetcher::new(move || f().map_ok(|x| Box::new(x) as Box<dyn Any>));
-        let cache_value = Some(fetch_boxed(&fetcher, retrier).await?);
+        let fetcher = Fetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
+        let cache_value = Some(do_fetch(&fetcher, retrier).await?);
         let cache_time = Instant::now();
         let type_id = TypeId::of::<T>();
 
@@ -73,18 +74,18 @@ impl QueryClient {
         let ret = self
             .cache
             .get(&key)
-            .and_then(|x| x.cache_value.as_ref())
-            .and_then(|x| x.downcast_ref::<T>())
+            .and_then(|x| x.cache_value.clone())
+            .map(|x| x.downcast::<T>().unwrap())
             .unwrap(); // SAFETY: The value is `T`
 
         Ok(ret)
     }
 
-    pub async fn refetch_query<T: 'static>(&mut self, key: Key) -> Result<&T, Error> {
+    pub async fn refetch_query<T: 'static>(&mut self, key: Key) -> Result<Rc<T>, Error> {
         if let Some(query) = self.cache.get_mut(&key) {
             let retrier = self.retry.as_ref();
             let fetcher = &query.fetcher;
-            let cache_value = Some(fetch_boxed(&fetcher, retrier).await?);
+            let cache_value = Some(do_fetch(&fetcher, retrier).await?);
 
             query.cache_value = cache_value;
             query.updated_at = Instant::now();
@@ -92,34 +93,38 @@ impl QueryClient {
             let ret = self
                 .cache
                 .get(&key)
-                .and_then(|x| x.cache_value.as_ref())
-                .and_then(|x| x.downcast_ref::<T>())
+                .and_then(|x| x.cache_value.clone())
+                .unwrap() // SAFETY: value was added to cache
+                .downcast::<T>()
                 .unwrap();
 
             Ok(ret)
         } else {
-            todo!()
+            Err(QueryError::key_not_found(&key).into())
         }
     }
 
-    pub fn get_query_data<T: 'static>(&self, key: &Key) -> Option<&T> {
-        let stale_time = self.stale_time?;
+    pub fn get_query_data<T: 'static>(&self, key: &Key) -> Result<Rc<T>, QueryError> {
+        if let Some(stale_time) = self.stale_time {
+            if let Some(query) = self
+                .cache
+                .get(key)
+                .and_then(|x| x.get_if_not_stale(stale_time).cloned())
+            {
+                return query
+                    .downcast::<T>()
+                    .map_err(|_| QueryError::type_mismatch::<T>());
+            }
+        }
 
-        self.cache
-            .get(key)
-            .and_then(|x| x.get_if_not_stale(stale_time))
-            .and_then(|x| x.downcast_ref::<T>())
+        Err(QueryError::NoCacheValue)
     }
 
-    pub fn set_query_data<T: 'static>(
-        &mut self,
-        key: Key,
-        value: T,
-    ) -> Result<(), QueryClientError> {
+    pub fn set_query_data<T: 'static>(&mut self, key: Key, value: T) -> Result<(), QueryError> {
         if let Some(entry) = self.cache.get_mut(&key) {
             entry.set_value(value)
         } else {
-            Err(QueryClientError::key_not_found(&key))
+            Err(QueryError::key_not_found(&key))
         }
     }
 
@@ -178,10 +183,7 @@ impl QueryClientBuilder {
     }
 }
 
-async fn fetch_boxed<T: 'static>(
-    fetcher: &Fetcher<T>,
-    retrier: Option<&Retrier>,
-) -> Result<T, Error> {
+async fn do_fetch<T: 'static>(fetcher: &Fetcher<T>, retrier: Option<&Retrier>) -> Result<T, Error> {
     let mut ret = fetcher.get().await;
 
     if ret.is_ok() {

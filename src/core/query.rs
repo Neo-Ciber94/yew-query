@@ -1,19 +1,19 @@
 use std::{
     any::{Any, TypeId},
-    time::{Duration, Instant},
+    time::{Duration, Instant}, rc::Rc,
 };
 
-use super::{error::QueryClientError, fetcher::Fetcher};
+use super::{error::QueryError, fetcher::Fetcher};
 
 pub struct Query {
-    pub(crate) fetcher: Fetcher<Box<dyn Any>>,
-    pub(crate) cache_value: Option<Box<dyn Any>>,
+    pub(crate) fetcher: Fetcher<Rc<dyn Any>>,
+    pub(crate) cache_value: Option<Rc<dyn Any>>,
     pub(crate) updated_at: Instant,
     pub(crate) type_id: TypeId,
 }
 
 impl Query {
-    pub fn fetcher(&self) -> &Fetcher<Box<dyn Any>> {
+    pub fn fetcher(&self) -> &Fetcher<Rc<dyn Any>> {
         &self.fetcher
     }
 
@@ -30,7 +30,7 @@ impl Query {
         (now - self.updated_at) >= stale_time
     }
 
-    pub fn get_if_not_stale(&self, stale_time: Duration) -> Option<&Box<dyn Any>> {
+    pub fn get_if_not_stale(&self, stale_time: Duration) -> Option<&Rc<dyn Any>> {
         if self.is_stale_by_time(stale_time) {
             None
         } else {
@@ -38,12 +38,12 @@ impl Query {
         }
     }
 
-    pub(crate) fn set_value<T: 'static>(&mut self, value: T) -> Result<(), QueryClientError> {
+    pub(crate) fn set_value<T: 'static>(&mut self, value: T) -> Result<(), QueryError> {
         if self.type_id != TypeId::of::<T>() {
-            return Err(QueryClientError::type_mismatch::<T>());
+            return Err(QueryError::type_mismatch::<T>());
         }
 
-        self.cache_value = Some(Box::new(value));
+        self.cache_value = Some(Rc::new(value));
         self.updated_at = Instant::now();
         Ok(())
     }
