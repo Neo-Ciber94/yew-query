@@ -25,7 +25,7 @@ impl PartialEq for QueryClientHandle {
     }
 }
 
-pub fn use_query_client() -> Option<QueryClientHandle> {
+pub fn use_query_client() -> Option<Rc<RefCell<QueryClient>>> {
     let inner = use_context::<QueryClientContext>()?.client;
-    Some(QueryClientHandle { inner })
+    Some(inner)
 }
