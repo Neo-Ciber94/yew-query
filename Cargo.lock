@@ -555,5 +555,6 @@ name = "yew-query"
 version = "0.1.0-alpha"
 dependencies = [
  "futures",
+ "wasm-bindgen-futures",
  "yew",
 ]
