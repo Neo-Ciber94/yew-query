@@ -4,6 +4,7 @@ use super::{
 use futures::TryFutureExt;
 use std::{
     any::{Any, TypeId},
+    fmt::Debug,
     future::Future,
     rc::Rc,
     time::{Duration, Instant},
@@ -140,6 +141,16 @@ impl QueryClient {
         if let Some(entry) = self.cache.get_mut(key) {
             entry.cache_value = None;
         }
+    }
+}
+
+impl Debug for QueryClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QueryClient")
+            .field("cache", &"QueryCache")
+            .field("stale_time", &self.stale_time)
+            .field("retry", &"Retry")
+            .finish()
     }
 }
 

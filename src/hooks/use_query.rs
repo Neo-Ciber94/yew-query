@@ -1,41 +1,37 @@
-use std::{cell::Cell, convert::Infallible, ops::Deref, rc::Rc};
 use futures::Future;
+use std::{
+    cell::{Cell, RefCell},
+    convert::Infallible,
+    ops::Deref,
+    rc::Rc,
+};
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{AbortController, AbortSignal};
 use yew::{use_effect_with_deps, use_state, virtual_dom::Key, UseStateHandle};
 
-use crate::core::Error;
-
 use super::use_query_client::use_query_client;
+use crate::core::{client::QueryClient, Error};
 
+#[derive(Debug)]
 pub enum QueryState<T> {
     Idle,
     Loading,
+    Refetching,
     Ready(Rc<T>),
     Failed(Error),
 }
 
 impl<T> QueryState<T> {
-    pub fn value(&self) -> Option<&T> {
-        match &*self {
-            QueryState::Ready(x) => Some(x.as_ref()),
-            _ => None,
-        }
-    }
-
-    pub fn error(&self) -> Option<&Error> {
-        match &*self {
-            QueryState::Failed(x) => Some(x),
-            _ => None,
-        }
-    }
-
     pub fn is_idle(&self) -> bool {
         matches!(&*self, QueryState::Idle)
     }
 
     pub fn is_loading(&self) -> bool {
         matches!(&*self, QueryState::Loading)
+    }
+
+    pub fn is_refetching(&self) -> bool {
+        matches!(&*self, QueryState::Refetching)
     }
 
     pub fn is_ready(&self) -> bool {
@@ -54,7 +50,8 @@ where
     E: Into<Error> + 'static,
 {
     fetch: Box<dyn Fn(AbortSignal) -> Fut>,
-    disabled: bool,
+    enabled: bool,
+    initial_data: Option<T>,
 }
 
 impl<Fut, T, E> UseQueryOptions<Fut, T, E>
@@ -70,7 +67,8 @@ where
         let fetch = Box::new(fetch);
         UseQueryOptions {
             fetch,
-            disabled: false,
+            initial_data: None,
+            enabled: true,
         }
     }
 
@@ -78,30 +76,54 @@ where
     where
         F: Fn() -> Fut + 'static,
     {
-        let fetch = Box::new(move |_| fetch());
-        UseQueryOptions {
-            fetch,
-            disabled: false,
-        }
+        Self::new_abortable(move |_| fetch())
     }
 
-    pub fn disabled(mut self, disabled: bool) -> Self {
-        self.disabled = disabled;
+    pub fn initial_data(mut self, initial_data: T) -> Self {
+        self.initial_data = Some(initial_data);
+        self
+    }
+
+    pub fn enabled(mut self, enabled: bool) -> Self {
+        self.enabled = enabled;
         self
     }
 }
 
+#[derive(Debug)]
 pub struct UseQueryHandle<T> {
+    key: Key,
     state: UseStateHandle<QueryState<T>>,
+    client: Rc<RefCell<QueryClient>>,
+    initial_data: Option<T>,
 }
 
 impl<T> UseQueryHandle<T> {
-    pub fn refetch(&self) {
-        todo!()
+    pub fn key(&self) -> &Key {
+        &self.key
     }
 
-    pub fn is_cancelled(&self) -> bool {
-        todo!()
+    pub fn data(&self) -> Option<&T> {
+        match &*self.state {
+            QueryState::Ready(x) => Some(x.as_ref()),
+            QueryState::Loading | QueryState::Idle => self.initial_data.as_ref(),
+            _ => None,
+        }
+    }
+
+    pub fn error(&self) -> Option<&Error> {
+        match &*self.state {
+            QueryState::Failed(error) => Some(error),
+            _ => None,
+        }
+    }
+
+    pub fn refetch(&self) {
+        self.state.set(QueryState::Refetching);
+    }
+
+    pub fn remove(&self) {
+        self.client.borrow_mut().remove_query_data(&self.key);
     }
 }
 
@@ -113,10 +135,11 @@ impl<T> Deref for UseQueryHandle<T> {
     }
 }
 
-pub fn use_query<F, Fut, T>(key: Key, fetcher: F) -> UseQueryHandle<T>
+pub fn use_query<F, Fut, K, T>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn() -> Fut + 'static,
     Fut: Future<Output = T> + 'static,
+    K: Into<Key>,
     T: 'static,
 {
     use_query_with_options(
@@ -131,10 +154,11 @@ where
     )
 }
 
-pub fn use_query_with_signal<F, Fut, T>(key: Key, fetcher: F) -> UseQueryHandle<T>
+pub fn use_query_with_signal<F, Fut, K, T>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn(AbortSignal) -> Fut + 'static,
     Fut: Future<Output = T> + 'static,
+    K: Into<Key>,
     T: 'static,
 {
     use_query_with_options(
@@ -149,24 +173,45 @@ where
     )
 }
 
-pub fn use_query_with_options<Fut, T, E>(
-    key: Key,
+pub fn use_query_with_signal_and_failure<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
+where
+    F: Fn(AbortSignal) -> Fut + 'static,
+    Fut: Future<Output = Result<T, E>> + 'static,
+    K: Into<Key>,
+    E: Into<Error> + 'static,
+    T: 'static,
+{
+    use_query_with_options(key, UseQueryOptions::new_abortable(fetcher))
+}
+
+pub fn use_query_with_options<Fut, K, T, E>(
+    key: K,
     options: UseQueryOptions<Fut, T, E>,
 ) -> UseQueryHandle<T>
 where
     Fut: Future<Output = Result<T, E>> + 'static,
+    K: Into<Key>,
     T: 'static,
     E: Into<Error> + 'static,
 {
-    let UseQueryOptions { disabled, fetch } = options;
+    let UseQueryOptions {
+        fetch,
+        initial_data,
+        enabled,
+    } = options;
+
+    let key = key.into();
     let client = use_query_client().expect("expected `QueryClient`");
     let state = use_state(|| QueryState::Idle);
+    let query_state = std::mem::discriminant(&*state);
     let last_id = use_state(|| Cell::new(0_usize));
 
     {
         let state = state.clone();
+        let client = client.clone();
+
         use_effect_with_deps(
-            move |(k, disabled)| {
+            move |(key, enabled, _)| {
                 let abort_controller = AbortController::new().expect("expected `AbortController`");
                 let signal = abort_controller.signal();
 
@@ -180,7 +225,7 @@ where
                     }
                 };
 
-                if *disabled {
+                if *enabled == false || !(state.is_idle() || state.is_refetching()) {
                     return cleanup;
                 }
 
@@ -189,8 +234,8 @@ where
                 let id = last_id.get().wrapping_add(1);
                 (*last_id).set(id);
 
-                let key = k.clone();
-                let disabled = *disabled;
+                let key = key.clone();
+                let enabled = *enabled;
 
                 spawn_local(async move {
                     let state = state.clone();
@@ -199,7 +244,7 @@ where
 
                     if id == last_id.get() {
                         match result {
-                            _ if disabled => {
+                            _ if !enabled => {
                                 state.set(QueryState::Idle);
                             }
                             Ok(x) => {
@@ -214,9 +259,14 @@ where
 
                 cleanup
             },
-            (key.clone(), disabled),
+            (key.clone(), enabled, query_state),
         );
     }
 
-    UseQueryHandle { state }
+    UseQueryHandle {
+        key,
+        state,
+        client,
+        initial_data,
+    }
 }
