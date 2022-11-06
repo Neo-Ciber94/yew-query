@@ -1,8 +1,8 @@
 use std::{
     any::{Any, TypeId},
-    time::{Duration, Instant}, rc::Rc,
+    time::{Duration}, rc::Rc,
 };
-
+use instant::Instant;
 use super::{error::QueryError, fetcher::Fetcher};
 
 pub struct Query {

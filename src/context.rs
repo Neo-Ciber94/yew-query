@@ -22,10 +22,10 @@ impl PartialEq for QueryClientContext {
 
 #[derive(Properties)]
 pub struct QueryClientContextProps {
-    client: Rc<RefCell<QueryClient>>,
+    pub client: Rc<RefCell<QueryClient>>,
 
     #[prop_or_default]
-    children: Children,
+    pub children: Children,
 }
 
 impl PartialEq for QueryClientContextProps {
@@ -36,8 +36,8 @@ impl PartialEq for QueryClientContextProps {
     }
 }
 
-#[function_component(Get)]
-pub fn QueryClientProvider(props: &QueryClientContextProps) -> yew::Html {
+#[function_component(QueryClientProvider)]
+pub fn query_client_provider(props: &QueryClientContextProps) -> yew::Html {
     let context = QueryClientContext {
         client: props.client.clone(),
     };

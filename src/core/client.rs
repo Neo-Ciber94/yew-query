@@ -7,8 +7,9 @@ use std::{
     fmt::Debug,
     future::Future,
     rc::Rc,
-    time::{Duration, Instant},
+    time::{Duration},
 };
+use instant::Instant;
 use yew::virtual_dom::Key;
 
 pub struct QueryClient {
@@ -46,6 +47,7 @@ impl QueryClient {
         // Get value if cached
         if self.is_cached(&key) {
             if let Some(stale_time) = self.stale_time {
+                log::trace!("Using cached data for: {key}");
                 return Ok(self
                     .cache
                     .get(&key)
@@ -56,6 +58,7 @@ impl QueryClient {
             }
         }
 
+        log::trace!("fetching data for: {key}");
         let retrier = self.retry.as_ref();
         let fetcher = Fetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
         let cache_value = Some(do_fetch(&fetcher, retrier).await?);
@@ -215,9 +218,9 @@ async fn do_fetch<T: 'static>(fetcher: &Fetcher<T>, retrier: Option<&Retrier>) -
 mod utils {
     use std::{
         task::Poll,
-        time::{Duration, Instant},
+        time::{Duration},
     };
-
+    use instant::Instant;
     use futures::Future;
 
     pub async fn sleep(duration: Duration) {

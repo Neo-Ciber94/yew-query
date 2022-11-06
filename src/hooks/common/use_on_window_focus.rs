@@ -1,6 +1,6 @@
 use wasm_bindgen::{prelude::Closure, JsCast};
 use web_sys::{window, Event};
-use yew::use_effect;
+use yew::use_effect_with_deps;
 
 use super::use_is_first_render::use_is_first_render;
 
@@ -10,7 +10,7 @@ where
 {
     let first_render = use_is_first_render();
 
-    use_effect(move || {
+    use_effect_with_deps(move |_| {
         let window = window().unwrap();
         let cleanup = || ();
 
@@ -26,5 +26,5 @@ where
 
         cb.forget();
         cleanup
-    });
+    }, ());
 }
