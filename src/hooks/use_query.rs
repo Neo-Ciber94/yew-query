@@ -9,11 +9,11 @@ use wasm_bindgen_futures::spawn_local;
 use web_sys::{AbortController, AbortSignal};
 use yew::{use_effect_with_deps, use_state, virtual_dom::Key, UseStateHandle};
 
-use super::use_query_client::use_query_client;
-use crate::{
-    core::{client::QueryClient, Error},
-    hooks::use_on_reconnect::use_on_reconnect,
+use super::{
+    common::{use_on_reconnect, use_on_window_focus},
+    use_query_client::use_query_client,
 };
+use crate::core::{client::QueryClient, Error};
 
 #[derive(Debug)]
 pub enum QueryState<T> {
@@ -56,6 +56,7 @@ where
     initial_data: Option<T>,
     enabled: bool,
     refetch_on_reconnect: bool,
+    refetch_on_window_focus: bool,
 }
 
 impl<Fut, T, E> UseQueryOptions<Fut, T, E>
@@ -74,6 +75,7 @@ where
             initial_data: None,
             enabled: true,
             refetch_on_reconnect: true,
+            refetch_on_window_focus: true,
         }
     }
 
@@ -96,6 +98,11 @@ where
 
     pub fn refetch_on_reconnect(mut self, refetch_on_reconnect: bool) -> Self {
         self.refetch_on_reconnect = refetch_on_reconnect;
+        self
+    }
+
+    pub fn refetch_on_window_focus(mut self, refetch_on_window_focus: bool) -> Self {
+        self.refetch_on_window_focus = refetch_on_window_focus;
         self
     }
 }
@@ -209,6 +216,7 @@ where
         initial_data,
         enabled,
         refetch_on_reconnect,
+        refetch_on_window_focus,
     } = options;
 
     let key = key.into();
@@ -221,6 +229,17 @@ where
         let state = state.clone();
         use_on_reconnect(move || {
             if !refetch_on_reconnect || !enabled || !state.is_loading() {
+                return;
+            }
+
+            state.set(QueryState::Refetching);
+        });
+    }
+
+    {
+        let state = state.clone();
+        use_on_window_focus(move || {
+            if !refetch_on_window_focus || !enabled || !state.is_loading() {
                 return;
             }
 
