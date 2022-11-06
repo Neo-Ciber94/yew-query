@@ -7,7 +7,7 @@ use std::{
 };
 use wasm_bindgen_futures::spawn_local;
 use web_sys::{AbortController, AbortSignal};
-use yew::{use_effect_with_deps, use_state, virtual_dom::Key, UseStateHandle};
+use yew::{use_effect, use_effect_with_deps, use_state, virtual_dom::Key, UseStateHandle};
 
 use super::{
     common::{use_on_reconnect, use_on_window_focus},
@@ -55,6 +55,7 @@ where
     fetch: Box<dyn Fn(AbortSignal) -> Fut>,
     initial_data: Option<T>,
     enabled: bool,
+    refetch_on_mount: bool,
     refetch_on_reconnect: bool,
     refetch_on_window_focus: bool,
 }
@@ -74,6 +75,7 @@ where
             fetch,
             initial_data: None,
             enabled: true,
+            refetch_on_mount: true,
             refetch_on_reconnect: true,
             refetch_on_window_focus: true,
         }
@@ -93,6 +95,11 @@ where
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    pub fn refetch_on_mount(mut self, refetch_on_mount: bool) -> Self {
+        self.refetch_on_mount = refetch_on_mount;
         self
     }
 
@@ -215,6 +222,7 @@ where
         fetch,
         initial_data,
         enabled,
+        refetch_on_mount,
         refetch_on_reconnect,
         refetch_on_window_focus,
     } = options;
@@ -225,6 +233,21 @@ where
     let query_state = std::mem::discriminant(&*state);
     let last_id = use_state(|| Cell::new(0_usize));
 
+    // On mount
+    {
+        let state = state.clone();
+        use_effect(move || {
+            let cleanup = || ();
+            if !refetch_on_mount || !enabled || !state.is_loading() {
+                return cleanup;
+            }
+
+            state.set(QueryState::Refetching);
+            cleanup
+        });
+    }
+
+    // On reconnection
     {
         let state = state.clone();
         use_on_reconnect(move || {
@@ -236,6 +259,7 @@ where
         });
     }
 
+    // On window focus
     {
         let state = state.clone();
         use_on_window_focus(move || {
