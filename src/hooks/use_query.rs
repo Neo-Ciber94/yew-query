@@ -10,7 +10,10 @@ use web_sys::{AbortController, AbortSignal};
 use yew::{use_effect_with_deps, use_state, virtual_dom::Key, UseStateHandle};
 
 use super::use_query_client::use_query_client;
-use crate::core::{client::QueryClient, Error};
+use crate::{
+    core::{client::QueryClient, Error},
+    hooks::use_on_reconnect::use_on_reconnect,
+};
 
 #[derive(Debug)]
 pub enum QueryState<T> {
@@ -50,8 +53,9 @@ where
     E: Into<Error> + 'static,
 {
     fetch: Box<dyn Fn(AbortSignal) -> Fut>,
-    enabled: bool,
     initial_data: Option<T>,
+    enabled: bool,
+    refetch_on_reconnect: bool,
 }
 
 impl<Fut, T, E> UseQueryOptions<Fut, T, E>
@@ -69,6 +73,7 @@ where
             fetch,
             initial_data: None,
             enabled: true,
+            refetch_on_reconnect: true,
         }
     }
 
@@ -86,6 +91,11 @@ where
 
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
+        self
+    }
+
+    pub fn refetch_on_reconnect(mut self, refetch_on_reconnect: bool) -> Self {
+        self.refetch_on_reconnect = refetch_on_reconnect;
         self
     }
 }
@@ -198,6 +208,7 @@ where
         fetch,
         initial_data,
         enabled,
+        refetch_on_reconnect,
     } = options;
 
     let key = key.into();
@@ -205,6 +216,17 @@ where
     let state = use_state(|| QueryState::Idle);
     let query_state = std::mem::discriminant(&*state);
     let last_id = use_state(|| Cell::new(0_usize));
+
+    {
+        let state = state.clone();
+        use_on_reconnect(move || {
+            if !refetch_on_reconnect || !enabled || !state.is_loading() {
+                return;
+            }
+
+            state.set(QueryState::Refetching);
+        });
+    }
 
     {
         let state = state.clone();
