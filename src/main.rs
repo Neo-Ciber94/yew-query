@@ -11,7 +11,7 @@ use yew_query::core::client::QueryClient;
 use yew_query::hooks::use_query_with_failure;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+//#[serde(rename_all = "camelCase")]
 pub struct Post {
     pub user_id: i64,
     pub id: i64,
@@ -23,7 +23,7 @@ pub struct Post {
 fn content() -> Html {
     let query = use_query_with_failure("posts", fetch_posts);
 
-    if query.is_loading() || query.data().is_none() {
+    if query.is_loading() {
         return html! {
             "Loading..."
         };
@@ -37,7 +37,7 @@ fn content() -> Html {
 
     log::info!("Result: {query:#?}");
 
-    let posts = query.data().unwrap();
+    let posts = query.data().cloned().unwrap_or_default();
 
     html! {
         <>
