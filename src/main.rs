@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use yew::prelude::*;
 use yew_query::context::QueryClientProvider;
 use yew_query::core::client::QueryClient;
-use yew_query::hooks::use_query_with_failure;
+use yew_query::hooks::use_query;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -21,7 +21,7 @@ pub struct Post {
 
 #[function_component(PostList)]
 fn post_list() -> Html {
-    let query = use_query_with_failure("posts", fetch_posts);
+    let query = use_query("posts", fetch_posts);
 
     if query.is_loading() {
         return html! {
@@ -35,43 +35,41 @@ fn post_list() -> Html {
         };
     }
 
-    log::info!("Result: {query:#?}");
-
     let posts = query.data().cloned().unwrap_or_default();
 
     html! {
-        <>
-            <ul>
-                { posts.iter().map(|post| {
-                    html! {
-                        <li>
-                            <p>{format!("id: {}", post.id)}</p>
+        <ul style="list-style-type: none;">
+            { posts.iter().map(|post| {
+                html! {
+                    <li style="padding-bottom: 10px;">
+                        <fieldset>
+                            <legend>{format!("id: {}", post.id)}</legend>
                             <p>{format!("title: {}", post.title)}</p>
-                        </li>
-                    }
-                }).collect::<Html>()}
-            </ul>
-        </>
+                        </fieldset>
+                    </li>
+                }
+            }).collect::<Html>()}
+        </ul>
     }
 }
 
 #[function_component(Content)]
 fn content() -> Html {
-    let show_state = use_state(|| false);
+    let show = use_state(|| false);
 
     let toggle_show = {
-        let show_state = show_state.clone();
+        let show = show.clone();
 
         move |_| {
-            let show = !*show_state;
-            show_state.set(show);
+            let visible = !*show;
+            show.set(visible);
         }
     };
 
     html! {
         <>
             <button onclick={toggle_show}>{"Show"}</button>
-            if *show_state {
+            if *show {
                 <PostList/>
             }
         </>

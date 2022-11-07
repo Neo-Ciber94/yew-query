@@ -10,21 +10,27 @@ where
 {
     let first_render = use_is_first_render();
 
-    use_effect_with_deps(move |_| {
-        let window = window().unwrap();
-        let cleanup = || ();
+    use_effect_with_deps(
+        move |first_render| {
+            let window = window().unwrap();
+            let cleanup = || ();
 
-        if first_render {
-            return cleanup;
-        }
+            if *first_render {
+                return cleanup;
+            }
 
-        let cb = Closure::wrap(Box::new(move |_: Event| callback()) as Box<dyn FnMut(_)>);
+            let cb = Closure::wrap(Box::new(move |_: Event| {
+                callback();
+                log::trace!("focus");
+            }) as Box<dyn FnMut(_)>);
 
-        window
-            .add_event_listener_with_callback("focus", &cb.as_ref().unchecked_ref())
-            .unwrap();
+            window
+                .add_event_listener_with_callback("focus", &cb.as_ref().unchecked_ref())
+                .unwrap();
 
-        cb.forget();
-        cleanup
-    }, ());
+            cb.forget();
+            cleanup
+        },
+        first_render,
+    );
 }

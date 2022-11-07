@@ -2,7 +2,6 @@ use super::common::Callback;
 use futures::Future;
 use std::{
     cell::{Cell, RefCell},
-    convert::Infallible,
     fmt::Debug,
     ops::Deref,
     rc::Rc,
@@ -13,7 +12,7 @@ use yew::{use_effect_with_deps, use_mut_ref, use_state, virtual_dom::Key, UseSta
 
 use super::{
     common::{
-        use_abort_controller, use_callback, use_is_first_render, use_on_reconnect,
+        use_abort_controller, use_callback, use_is_first_render, use_on_online,
         use_on_window_focus,
     },
     use_query_client::use_query_client,
@@ -179,56 +178,24 @@ impl<T> Deref for UseQueryHandle<T> {
     }
 }
 
-pub fn use_query<F, Fut, K, T>(key: K, fetcher: F) -> UseQueryHandle<T>
-where
-    F: Fn() -> Fut + 'static,
-    Fut: Future<Output = T> + 'static,
-    K: Into<Key>,
-    T: 'static,
-{
-    use_query_with_options(UseQueryOptions::new(key.into(), move || {
-        let fut = fetcher();
-        async move {
-            let ret = fut.await;
-            Ok::<_, Infallible>(ret)
-        }
-    }))
-}
-
-pub fn use_query_with_signal<F, Fut, K, T>(key: K, fetcher: F) -> UseQueryHandle<T>
-where
-    F: Fn(AbortSignal) -> Fut + 'static,
-    Fut: Future<Output = T> + 'static,
-    K: Into<Key>,
-    T: 'static,
-{
-    use_query_with_options(UseQueryOptions::new_abortable(key.into(), move |signal| {
-        let fut = fetcher(signal);
-        async move {
-            let ret = fut.await;
-            Ok::<_, Infallible>(ret)
-        }
-    }))
-}
-
-pub fn use_query_with_failure<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
+pub fn use_query<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn() -> Fut + 'static,
     Fut: Future<Output = Result<T, E>> + 'static,
     K: Into<Key>,
-    E: Into<Error> + 'static,
     T: 'static,
+    E: Into<Error> + 'static,
 {
     use_query_with_options(UseQueryOptions::new(key.into(), fetcher))
 }
 
-pub fn use_query_with_signal_and_failure<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
+pub fn use_query_with_signal<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn(AbortSignal) -> Fut + 'static,
     Fut: Future<Output = Result<T, E>> + 'static,
     K: Into<Key>,
-    E: Into<Error> + 'static,
     T: 'static,
+    E: Into<Error> + 'static,
 {
     use_query_with_options(UseQueryOptions::new_abortable(key.into(), fetcher))
 }
@@ -324,7 +291,7 @@ where
         let callback = {
             let is_refetching = refetching.clone();
             let do_fetch = do_fetch.clone();
-            
+
             Callback::from(move |_| {
                 is_refetching.set(true);
                 do_fetch.emit(());
@@ -355,12 +322,12 @@ where
         )
     }
 
-    // On reconnection
+    // On online
     {
         let do_fetch = do_fetch.clone();
         let key = key.clone();
 
-        use_on_reconnect(move || {
+        use_on_online(move || {
             if refetch_on_reconnect {
                 log::trace!("refetch on reconnect: {key}");
                 do_fetch.emit(());
