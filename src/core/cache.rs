@@ -1,10 +1,10 @@
+use super::query::Query;
 use std::collections::{BTreeMap, HashMap};
+use std::fmt::Debug;
 use yew::virtual_dom::Key;
 
-use super::query::Query;
-
 /// Provides a way to cache data.
-pub trait QueryCache {
+pub trait QueryCache: Debug {
     /// Returns the cache entry with the given key.
     fn get(&self, key: &Key) -> Option<&Query>;
 

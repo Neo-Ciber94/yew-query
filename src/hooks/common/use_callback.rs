@@ -1,7 +1,7 @@
 use super::use_memo;
 use std::{fmt, rc::Rc};
 
-pub struct Callback<IN, OUT> {
+pub struct Callback<IN, OUT = ()> {
     pub(crate) cb: Rc<dyn Fn(IN) -> OUT>,
 }
 

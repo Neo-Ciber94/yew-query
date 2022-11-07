@@ -30,9 +30,7 @@ pub struct QueryClientContextProps {
 
 impl PartialEq for QueryClientContextProps {
     fn eq(&self, other: &Self) -> bool {
-        let p1 = &self.client as *const _ as usize;
-        let p2 = &other.client as *const _ as usize;
-        p1 == p2 && self.children == other.children
+        Rc::ptr_eq(&self.client, &other.client) && self.children == other.children
     }
 }
 

@@ -11,7 +11,7 @@ use yew_query::core::client::QueryClient;
 use yew_query::hooks::use_query_with_failure;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
-//#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Post {
     pub user_id: i64,
     pub id: i64,
@@ -19,8 +19,8 @@ pub struct Post {
     pub body: String,
 }
 
-#[function_component(Content)]
-fn content() -> Html {
+#[function_component(PostList)]
+fn post_list() -> Html {
     let query = use_query_with_failure("posts", fetch_posts);
 
     if query.is_loading() {
@@ -55,14 +55,8 @@ fn content() -> Html {
     }
 }
 
-#[function_component(App)]
-fn app() -> Html {
-    let client = Rc::new(RefCell::new(
-        QueryClient::builder()
-            .stale_time(Duration::from_secs(10))
-            .build(HashMap::new()),
-    ));
-
+#[function_component(Content)]
+fn content() -> Html {
     let show_state = use_state(|| false);
 
     let toggle_show = {
@@ -75,11 +69,26 @@ fn app() -> Html {
     };
 
     html! {
-        <QueryClientProvider {client}>
+        <>
             <button onclick={toggle_show}>{"Show"}</button>
             if *show_state {
-                <Content />
+                <PostList/>
             }
+        </>
+    }
+}
+
+#[function_component(App)]
+fn app() -> Html {
+    let client = Rc::new(RefCell::new(
+        QueryClient::builder()
+            .stale_time(Duration::from_secs(10))
+            .build(HashMap::new()),
+    ));
+
+    html! {
+        <QueryClientProvider {client}>
+            <Content />
         </QueryClientProvider>
     }
 }

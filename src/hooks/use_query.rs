@@ -1,3 +1,4 @@
+use super::common::Callback;
 use futures::Future;
 use std::{
     cell::{Cell, RefCell},
@@ -22,7 +23,6 @@ use crate::core::{client::QueryClient, Error};
 pub enum QueryState<T> {
     Idle,
     Loading,
-    Refetching,
     Ready(Rc<T>),
     Failed(Error),
 }
@@ -32,7 +32,6 @@ impl<T> Debug for QueryState<T> {
         match self {
             Self::Idle => write!(f, "Idle"),
             Self::Loading => write!(f, "Loading"),
-            Self::Refetching => write!(f, "Refetching"),
             Self::Ready(_) => write!(f, "Ready"),
             Self::Failed(err) => write!(f, "Failed({err:?})"),
         }
@@ -46,10 +45,6 @@ impl<T> QueryState<T> {
 
     pub fn is_loading(&self) -> bool {
         matches!(&*self, QueryState::Loading)
-    }
-
-    pub fn is_refetching(&self) -> bool {
-        matches!(&*self, QueryState::Refetching)
     }
 
     pub fn is_ready(&self) -> bool {
@@ -67,8 +62,8 @@ where
     T: 'static,
     E: Into<Error> + 'static,
 {
+    key: Key,
     fetch: Rc<dyn Fn(AbortSignal) -> Fut>,
-    initial_data: Option<T>,
     enabled: bool,
     refetch_on_mount: bool,
     refetch_on_reconnect: bool,
@@ -81,14 +76,19 @@ where
     T: 'static,
     E: Into<Error> + 'static,
 {
-    pub fn new_abortable<F>(fetch: F) -> Self
+    pub fn new_abortable<K, F>(key: K, fetch: F) -> Self
     where
         F: Fn(AbortSignal) -> Fut + 'static,
+        K: Into<Key>,
     {
         let fetch = Rc::new(fetch);
+        let key = key.into();
+
         UseQueryOptions {
+            key,
             fetch,
-            initial_data: None,
+            // initial_data: None,
+            // placeholder_data: None,
             enabled: true,
             refetch_on_mount: true,
             refetch_on_reconnect: true,
@@ -96,16 +96,12 @@ where
         }
     }
 
-    pub fn new<F>(fetch: F) -> Self
+    pub fn new<K, F>(key: K, fetch: F) -> Self
     where
+        K: Into<Key>,
         F: Fn() -> Fut + 'static,
     {
-        Self::new_abortable(move |_| fetch())
-    }
-
-    pub fn initial_data(mut self, initial_data: T) -> Self {
-        self.initial_data = Some(initial_data);
-        self
+        Self::new_abortable(key, move |_| fetch())
     }
 
     pub fn enabled(mut self, enabled: bool) -> Self {
@@ -130,11 +126,17 @@ where
 }
 
 #[derive(Debug)]
+struct Refetcher {
+    callback: Callback<()>,
+    is_refetching: UseStateHandle<bool>,
+}
+
+#[derive(Debug)]
 pub struct UseQueryHandle<T> {
     key: Key,
     state: UseStateHandle<QueryState<T>>,
     client: Rc<RefCell<QueryClient>>,
-    initial_data: Option<T>,
+    refetcher: Refetcher,
 }
 
 impl<T> UseQueryHandle<T> {
@@ -145,7 +147,6 @@ impl<T> UseQueryHandle<T> {
     pub fn data(&self) -> Option<&T> {
         match &*self.state {
             QueryState::Ready(x) => Some(x.as_ref()),
-            QueryState::Loading | QueryState::Idle => self.initial_data.as_ref(),
             _ => None,
         }
     }
@@ -157,8 +158,12 @@ impl<T> UseQueryHandle<T> {
         }
     }
 
+    pub fn is_refetching(&self) -> bool {
+        *self.refetcher.is_refetching
+    }
+
     pub fn refetch(&self) {
-        self.state.set(QueryState::Refetching);
+        self.refetcher.callback.emit(());
     }
 
     pub fn remove(&self) {
@@ -181,16 +186,13 @@ where
     K: Into<Key>,
     T: 'static,
 {
-    use_query_with_options(
-        key,
-        UseQueryOptions::new(move || {
-            let fut = fetcher();
-            async move {
-                let ret = fut.await;
-                Ok::<_, Infallible>(ret)
-            }
-        }),
-    )
+    use_query_with_options(UseQueryOptions::new(key.into(), move || {
+        let fut = fetcher();
+        async move {
+            let ret = fut.await;
+            Ok::<_, Infallible>(ret)
+        }
+    }))
 }
 
 pub fn use_query_with_signal<F, Fut, K, T>(key: K, fetcher: F) -> UseQueryHandle<T>
@@ -200,16 +202,13 @@ where
     K: Into<Key>,
     T: 'static,
 {
-    use_query_with_options(
-        key,
-        UseQueryOptions::new_abortable(move |signal| {
-            let fut = fetcher(signal);
-            async move {
-                let ret = fut.await;
-                Ok::<_, Infallible>(ret)
-            }
-        }),
-    )
+    use_query_with_options(UseQueryOptions::new_abortable(key.into(), move |signal| {
+        let fut = fetcher(signal);
+        async move {
+            let ret = fut.await;
+            Ok::<_, Infallible>(ret)
+        }
+    }))
 }
 
 pub fn use_query_with_failure<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
@@ -220,7 +219,7 @@ where
     E: Into<Error> + 'static,
     T: 'static,
 {
-    use_query_with_options(key, UseQueryOptions::new(fetcher))
+    use_query_with_options(UseQueryOptions::new(key.into(), fetcher))
 }
 
 pub fn use_query_with_signal_and_failure<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
@@ -231,45 +230,43 @@ where
     E: Into<Error> + 'static,
     T: 'static,
 {
-    use_query_with_options(key, UseQueryOptions::new_abortable(fetcher))
+    use_query_with_options(UseQueryOptions::new_abortable(key.into(), fetcher))
 }
 
-pub fn use_query_with_options<Fut, K, T, E>(
-    key: K,
-    options: UseQueryOptions<Fut, T, E>,
-) -> UseQueryHandle<T>
+pub fn use_query_with_options<Fut, T, E>(options: UseQueryOptions<Fut, T, E>) -> UseQueryHandle<T>
 where
     Fut: Future<Output = Result<T, E>> + 'static,
-    K: Into<Key>,
     T: 'static,
     E: Into<Error> + 'static,
 {
     let UseQueryOptions {
+        key,
         fetch,
-        initial_data,
         enabled,
         refetch_on_mount,
         refetch_on_reconnect,
         refetch_on_window_focus,
     } = options;
 
-    let key = key.into();
     let client = use_query_client().expect("expected `QueryClient`");
     let state = use_state(|| QueryState::Idle);
+    let refetching = use_state(|| false);
     let last_id = use_mut_ref(|| Cell::new(0_usize));
     let first_render = use_is_first_render();
     let abort_controller = use_abort_controller();
 
     let do_fetch = {
         let state = state.clone();
+        let refetching = refetching.clone();
         let abort_controller = abort_controller.clone();
         let client = client.clone();
 
         use_callback(
             move |(), deps| {
+                let state = state.clone();
+                let refetching = refetching.clone();
                 let fetch = fetch.clone();
                 let client = client.clone();
-                let state = state.clone();
                 let last_id = last_id.clone();
 
                 //
@@ -296,6 +293,10 @@ where
                         .await;
 
                     if id == last_id.borrow().get() {
+                        if *refetching {
+                            refetching.set(false);
+                        }
+
                         match result {
                             _ if !enabled => {
                                 log::trace!("fetch disabled: {key}");
@@ -315,6 +316,25 @@ where
             },
             (key.clone(), enabled),
         )
+    };
+
+    // Refetch
+    let refetcher = {
+        let is_refetching = refetching.clone();
+        let callback = {
+            let is_refetching = refetching.clone();
+            let do_fetch = do_fetch.clone();
+            
+            Callback::from(move |_| {
+                is_refetching.set(true);
+                do_fetch.emit(());
+            })
+        };
+
+        Refetcher {
+            callback,
+            is_refetching,
+        }
     };
 
     // On mount
@@ -364,18 +384,14 @@ where
     // Fetch
     {
         let do_fetch = do_fetch.clone();
-        let state = state.clone();
 
         use_effect_with_deps(
             move |_| {
                 do_fetch.emit(());
 
                 move || {
-                    if state.is_loading() {
-                        log::trace!("abort fetch");
-                        abort_controller.abort();
-                        state.set(QueryState::Idle);
-                    }
+                    log::trace!("unmount");
+                    abort_controller.abort();
                 }
             },
             (),
@@ -386,6 +402,6 @@ where
         key,
         state,
         client,
-        initial_data,
+        refetcher,
     }
 }

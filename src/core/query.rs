@@ -1,9 +1,11 @@
+use super::{error::QueryError, fetcher::Fetcher};
+use instant::Instant;
 use std::{
     any::{Any, TypeId},
-    time::{Duration}, rc::Rc,
+    fmt::Debug,
+    rc::Rc,
+    time::Duration,
 };
-use instant::Instant;
-use super::{error::QueryError, fetcher::Fetcher};
 
 pub struct Query {
     pub(crate) fetcher: Fetcher<Rc<dyn Any>>,
@@ -46,5 +48,22 @@ impl Query {
         self.cache_value = Some(Rc::new(value));
         self.updated_at = Instant::now();
         Ok(())
+    }
+}
+
+impl Debug for Query {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let cache_value = if self.cache_value.is_some() {
+            "Some(..)"
+        } else {
+            "None"
+        };
+        
+        f.debug_struct("Query")
+            .field("fetcher", &"Fetcher<_>")
+            .field("cache_value", &cache_value)
+            .field("updated_at", &self.updated_at)
+            .field("type_id", &self.type_id)
+            .finish()
     }
 }

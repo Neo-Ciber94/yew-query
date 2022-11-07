@@ -2,14 +2,14 @@ use super::{
     cache::QueryCache, error::QueryError, fetcher::Fetcher, query::Query, retry::Retrier, Error,
 };
 use futures::TryFutureExt;
+use instant::Instant;
 use std::{
     any::{Any, TypeId},
     fmt::Debug,
     future::Future,
     rc::Rc,
-    time::{Duration},
+    time::Duration,
 };
-use instant::Instant;
 use yew::virtual_dom::Key;
 
 pub struct QueryClient {
@@ -47,7 +47,6 @@ impl QueryClient {
         // Get value if cached
         if self.is_cached(&key) {
             if let Some(stale_time) = self.stale_time {
-                log::trace!("Using cached data for: {key}");
                 return Ok(self
                     .cache
                     .get(&key)
@@ -58,18 +57,17 @@ impl QueryClient {
             }
         }
 
-        log::trace!("fetching data for: {key}");
         let retrier = self.retry.as_ref();
         let fetcher = Fetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
         let cache_value = Some(do_fetch(&fetcher, retrier).await?);
-        let cache_time = Instant::now();
+        let updated_at = Instant::now();
         let type_id = TypeId::of::<T>();
 
         self.cache.set(
             key.clone(),
             Query {
                 cache_value,
-                updated_at: cache_time,
+                updated_at,
                 fetcher,
                 type_id,
             },
@@ -150,7 +148,7 @@ impl QueryClient {
 impl Debug for QueryClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("QueryClient")
-            .field("cache", &"QueryCache")
+            .field("cache", &self.cache)
             .field("stale_time", &self.stale_time)
             .field("retry", &"Retry")
             .finish()
@@ -216,12 +214,9 @@ async fn do_fetch<T: 'static>(fetcher: &Fetcher<T>, retrier: Option<&Retrier>) -
 }
 
 mod utils {
-    use std::{
-        task::Poll,
-        time::{Duration},
-    };
-    use instant::Instant;
     use futures::Future;
+    use instant::Instant;
+    use std::{task::Poll, time::Duration};
 
     pub async fn sleep(duration: Duration) {
         Sleep::new(duration).await
