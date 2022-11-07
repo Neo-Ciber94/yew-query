@@ -1,24 +1,3 @@
-[package]
-name = "yew-query"
-description = "A future data observer for yew"
-keywords = ["wasm", "async"]
-license = "MIT"
-version = "0.1.0-alpha"
-edition = "2021"
-
-[dependencies]
-yew = "0.19.3"
-wasm-logger = "0.2.0"
-futures = "0.3.25"
-wasm-bindgen = "0.2.83"
-wasm-bindgen-futures = "0.4.33"
-web-sys = { version = "0.3.60", features = [
-    "AbortController",
-    "AbortSignal",
-    "Navigator",
-] }
-log = "0.4.17"
-reqwest = { version = "0.11", features = ["json"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-instant = { version = "0.1", features = [ "wasm-bindgen", "inaccurate" ] }
+[workspace]
+members = ["packages/*"]
+exclude = ["examples/*"]

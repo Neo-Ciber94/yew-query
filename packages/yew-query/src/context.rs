@@ -1,6 +1,6 @@
-use crate::core::client::QueryClient;
 use std::{cell::RefCell, rc::Rc};
 use yew::{function_component, Children, ContextProvider, Properties};
+use yew_query_core::client::QueryClient;
 
 pub struct QueryClientContext {
     pub(crate) client: Rc<RefCell<QueryClient>>,

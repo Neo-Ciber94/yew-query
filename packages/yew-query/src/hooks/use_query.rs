@@ -12,12 +12,11 @@ use yew::{use_effect_with_deps, use_mut_ref, use_state, virtual_dom::Key, UseSta
 
 use super::{
     common::{
-        use_abort_controller, use_callback, use_is_first_render, use_on_online,
-        use_on_window_focus,
+        use_abort_controller, use_callback, use_is_first_render, use_on_online, use_on_window_focus,
     },
     use_query_client::use_query_client,
 };
-use crate::core::{client::QueryClient, Error};
+use yew_query_core::{client::QueryClient, Error};
 
 pub enum QueryState<T> {
     Idle,
