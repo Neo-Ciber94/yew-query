@@ -3,13 +3,7 @@ use super::{
 };
 use futures::TryFutureExt;
 use instant::Instant;
-use std::{
-    any::{Any, TypeId},
-    fmt::Debug,
-    future::Future,
-    rc::Rc,
-    time::Duration,
-};
+use std::{any::Any, fmt::Debug, future::Future, rc::Rc, time::Duration};
 use yew::virtual_dom::Key;
 
 pub struct QueryClient {
@@ -59,9 +53,8 @@ impl QueryClient {
 
         let retrier = self.retry.as_ref();
         let fetcher = Fetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
-        let cache_value = Some(do_fetch(&fetcher, retrier).await?);
+        let cache_value = do_fetch(&fetcher, retrier).await?;
         let updated_at = Instant::now();
-        let type_id = TypeId::of::<T>();
 
         self.cache.set(
             key.clone(),
@@ -69,14 +62,13 @@ impl QueryClient {
                 cache_value,
                 updated_at,
                 fetcher,
-                type_id,
             },
         );
 
         let ret = self
             .cache
             .get(&key)
-            .and_then(|x| x.cache_value.clone())
+            .map(|x| x.cache_value.clone())
             .map(|x| x.downcast::<T>().unwrap())
             .unwrap(); // SAFETY: The value is `T`
 
@@ -87,7 +79,7 @@ impl QueryClient {
         if let Some(query) = self.cache.get_mut(&key) {
             let retrier = self.retry.as_ref();
             let fetcher = &query.fetcher;
-            let cache_value = Some(do_fetch(&fetcher, retrier).await?);
+            let cache_value = do_fetch(&fetcher, retrier).await?;
 
             query.cache_value = cache_value;
             query.updated_at = Instant::now();
@@ -95,7 +87,7 @@ impl QueryClient {
             let ret = self
                 .cache
                 .get(&key)
-                .and_then(|x| x.cache_value.clone())
+                .map(|x| x.cache_value.clone())
                 .unwrap() // SAFETY: value was added to cache
                 .downcast::<T>()
                 .unwrap();
@@ -162,12 +154,6 @@ impl QueryClient {
 
     pub fn clear_queries(&mut self) {
         self.cache.clear();
-    }
-
-    pub fn invalidate_query_data(&mut self, key: &Key) {
-        if let Some(entry) = self.cache.get_mut(key) {
-            entry.cache_value = None;
-        }
     }
 }
 
