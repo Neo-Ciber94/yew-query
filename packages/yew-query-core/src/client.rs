@@ -1,5 +1,5 @@
 use super::{
-    cache::QueryCache, error::QueryError, fetcher::Fetcher, query::Query, retry::Retrier, Error,
+    cache::QueryCache, error::QueryError, fetcher::Fetcher, query::Query, retry::Retryer, Error,
 };
 use futures::TryFutureExt;
 use instant::Instant;
@@ -15,7 +15,7 @@ use yew::virtual_dom::Key;
 pub struct QueryClient {
     cache: Box<dyn QueryCache>,
     stale_time: Option<Duration>,
-    retry: Option<Retrier>,
+    retry: Option<Retryer>,
 }
 
 impl QueryClient {
@@ -106,6 +106,32 @@ impl QueryClient {
         }
     }
 
+    pub async fn fetch_infinite_query<F, Fut, T, E>(
+        &mut self,
+        key: Key,
+        param: usize,
+        f: F,
+    ) -> Result<Rc<Vec<T>>, Error>
+    where
+        F: Fn(usize) -> Fut + 'static,
+        Fut: Future<Output = Option<Result<T, E>>> + 'static,
+        T: 'static,
+        E: Into<Error> + 'static,
+    {
+        todo!()
+    }
+
+    pub async fn refetch_infinite_query<T>(
+        &mut self,
+        key: Key,
+        param: usize,
+    ) -> Result<Rc<Vec<T>>, Error>
+    where
+        T: 'static,
+    {
+        todo!()
+    }
+
     pub fn get_query_data<T: 'static>(&self, key: &Key) -> Result<Rc<T>, QueryError> {
         if let Some(stale_time) = self.stale_time {
             if let Some(query) = self
@@ -158,7 +184,7 @@ impl Debug for QueryClient {
 #[derive(Default)]
 pub struct QueryClientBuilder {
     stale_time: Option<Duration>,
-    retry: Option<Retrier>,
+    retry: Option<Retryer>,
 }
 
 impl QueryClientBuilder {
@@ -176,7 +202,7 @@ impl QueryClientBuilder {
         R: Fn() -> I + 'static,
         I: Iterator<Item = Duration> + 'static,
     {
-        self.retry = Some(Retrier::new(retry));
+        self.retry = Some(Retryer::new(retry));
         self
     }
 
@@ -195,7 +221,7 @@ impl QueryClientBuilder {
     }
 }
 
-async fn do_fetch<T: 'static>(fetcher: &Fetcher<T>, retrier: Option<&Retrier>) -> Result<T, Error> {
+async fn do_fetch<T: 'static>(fetcher: &Fetcher<T>, retrier: Option<&Retryer>) -> Result<T, Error> {
     let mut ret = fetcher.get().await;
 
     if ret.is_ok() {

@@ -2,9 +2,9 @@ use std::time::Duration;
 
 pub type Retry = Box<dyn Iterator<Item = Duration>>;
 
-pub struct Retrier(Box<dyn Fn() -> Retry>);
+pub struct Retryer(Box<dyn Fn() -> Retry>);
 
-impl Retrier {
+impl Retryer {
     pub fn new<F, I>(f: F) -> Self
     where
         F: Fn() -> I + 'static,
@@ -15,7 +15,7 @@ impl Retrier {
             Box::new(retry) as Retry
         });
 
-        Retrier(f)
+        Retryer(f)
     }
 
     pub fn get(&self) -> Retry {
