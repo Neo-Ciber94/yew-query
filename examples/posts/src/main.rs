@@ -6,9 +6,9 @@ use std::time::Duration;
 use log::Level;
 use serde::{Deserialize, Serialize};
 use yew::prelude::*;
-use yew_query::context::QueryClientProvider;
-use yew_query::core::client::QueryClient;
-use yew_query::hooks::use_query;
+use yew_query::QueryClientProvider;
+use yew_query::QueryClient;
+use yew_query::use_query;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
