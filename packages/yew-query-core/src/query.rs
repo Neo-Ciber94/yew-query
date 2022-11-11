@@ -1,27 +1,38 @@
+use crate::{fetcher::InfiniteFetcher, timeout::Timeout};
+
 use super::{error::QueryError, fetcher::Fetcher};
 use instant::Instant;
 use std::{
     any::{Any, TypeId},
+    cell::RefCell,
     fmt::Debug,
     rc::Rc,
     time::Duration,
 };
 
+pub(crate) struct SingleQuery {
+    data: Rc<dyn Any>,
+    fetcher: Fetcher<Rc<dyn Any>>,
+}
+
+pub(crate) struct InfiniteQuery {
+    data: Rc<RefCell<Box<dyn Any>>>,
+    fetcher: InfiniteFetcher<Box<dyn Any>>,
+}
+
+pub(crate) enum QueryData {
+    Single(SingleQuery),
+    Infinite(InfiniteQuery),
+}
+
 pub struct Query {
     pub(crate) fetcher: Fetcher<Rc<dyn Any>>,
     pub(crate) cache_value: Rc<dyn Any>,
     pub(crate) updated_at: Instant,
+    pub(crate) timeout: Option<Timeout>,
 }
 
 impl Query {
-    pub fn fetcher(&self) -> &Fetcher<Rc<dyn Any>> {
-        &self.fetcher
-    }
-
-    pub fn updated_at(&self) -> &Instant {
-        &self.updated_at
-    }
-
     pub fn is_stale_by_time(&self, stale_time: Duration) -> bool {
         let now = Instant::now();
         (now - self.updated_at) >= stale_time

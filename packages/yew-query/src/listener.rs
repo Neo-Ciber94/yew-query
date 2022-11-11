@@ -12,9 +12,9 @@ pub struct EventListener {
 
 impl EventListener {
     /// Creates a listener to the given element target.
-    pub fn new<F>(event: &str, target: EventTarget, mut f: F) -> Self
+    pub fn new<F>(event: &str, target: EventTarget, f: F) -> Self
     where
-        F: FnMut(Event) + 'static,
+        F: Fn(Event) + 'static,
     {
         //let window = window().unwrap();
         let event = event.to_owned();
@@ -39,6 +39,15 @@ impl EventListener {
         }
     }
 
+    /// Creates a listener to a `window` event.
+    pub fn window<F>(event: &str, f: F) -> Self
+    where
+        F: Fn(Event) + 'static,
+    {
+        let window = window().unwrap().dyn_into().expect("failed to cast window");
+        Self::new(event, window, f)
+    }
+
     /// Returns the event being listened.
     pub fn event(&self) -> &str {
         &self.event.as_str()
@@ -47,15 +56,6 @@ impl EventListener {
     /// Returns the event target.
     pub fn target(&self) -> &EventTarget {
         &self.target
-    }
-
-    /// Creates a listener to a `window` event.
-    pub fn window<F>(event: &str, f: F) -> Self
-    where
-        F: FnMut(Event) + 'static,
-    {
-        let window = window().unwrap().dyn_into().expect("failed to cast window");
-        Self::new(event, window, f)
     }
 
     /// Unsubscribe from the event.
