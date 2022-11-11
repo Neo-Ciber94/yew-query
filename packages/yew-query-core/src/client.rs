@@ -5,7 +5,10 @@ use super::{
 };
 use futures::TryFutureExt;
 use instant::Instant;
-use std::{any::Any, cell::RefCell, fmt::Debug, future::Future, rc::Rc, time::Duration};
+use std::{
+    any::Any, cell::RefCell, collections::HashMap, fmt::Debug, future::Future, rc::Rc,
+    time::Duration,
+};
 use wasm_bindgen::JsValue;
 use yew::virtual_dom::Key;
 
@@ -200,6 +203,7 @@ impl Debug for QueryClient {
 pub struct QueryClientBuilder {
     stale_time: Option<Duration>,
     retry: Option<Retryer>,
+    cache: Option<Box<dyn QueryCache>>,
 }
 
 impl QueryClientBuilder {
@@ -221,13 +225,25 @@ impl QueryClientBuilder {
         self
     }
 
-    pub fn build<C>(self, cache: C) -> QueryClient
+    pub fn cache<C>(mut self, cache: C) -> Self
     where
         C: QueryCache + 'static,
     {
-        let Self { stale_time, retry } = self;
-        let cache = Box::new(cache) as Box<dyn QueryCache>;
-        let cache = Rc::new(RefCell::new(cache));
+        self.cache = Some(Box::new(cache));
+        self
+    }
+
+    pub fn build(self) -> QueryClient {
+        let Self {
+            stale_time,
+            retry,
+            cache,
+        } = self;
+
+        let cache = cache
+            .or_else(|| Some(Box::new(HashMap::new())))
+            .map(|x| Rc::new(RefCell::new(x)))
+            .unwrap();
 
         QueryClient {
             cache,
