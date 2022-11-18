@@ -1,7 +1,7 @@
-use crate::timeout::Timeout;
+use crate::{fetcher::Fetch, timeout::Timeout};
 
 use super::{
-    cache::QueryCache, error::QueryError, fetcher::Fetcher, query::Query, retry::Retryer, Error,
+    cache::QueryCache, error::QueryError, fetcher::BoxFetcher, query::Query, retry::Retryer, Error,
 };
 use futures::TryFutureExt;
 use instant::Instant;
@@ -50,19 +50,26 @@ impl QueryClient {
 
         // Get value if cached
         if let Some(query) = cache.get(&key) {
-            return Ok(query.cache_value.clone().downcast::<T>().unwrap());
+            return Ok(query.value.clone().downcast::<T>().unwrap());
         }
 
         let retrier = self.retry.as_ref();
-        let fetcher = Fetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
-        let cache_value = do_fetch(&fetcher, retrier).await?;
+
+        if self.stale_time.is_none() {
+            let ret = fetch_with_retry(&f, retrier).await;
+            return ret.map(|x| Rc::new(x));
+        }
+
+        let fetcher = BoxFetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
+        let value = fetch_with_retry(&fetcher, retrier).await?;
+
         let updated_at = Instant::now();
         let timeout = self.schedule_delete(&key);
 
         cache.set(
             key.clone(),
             Query {
-                cache_value,
+                value,
                 updated_at,
                 fetcher,
                 timeout,
@@ -71,7 +78,7 @@ impl QueryClient {
 
         let ret = cache
             .get(&key)
-            .map(|x| x.cache_value.clone())
+            .map(|x| x.value.clone())
             .map(|x| x.downcast::<T>().unwrap())
             .unwrap(); // SAFETY: The value is `T`
 
@@ -83,15 +90,15 @@ impl QueryClient {
         if let Some(query) = cache.get_mut(&key) {
             let retrier = self.retry.as_ref();
             let fetcher = &query.fetcher;
-            let cache_value = do_fetch(&fetcher, retrier).await?;
+            let value = fetch_with_retry(fetcher, retrier).await?;
 
-            query.cache_value = cache_value;
+            query.value = value;
             query.updated_at = Instant::now();
             self.schedule_delete(&key);
 
             let ret = cache
                 .get(&key)
-                .map(|x| x.cache_value.clone())
+                .map(|x| x.value.clone())
                 .unwrap() // SAFETY: value was added to cache
                 .downcast::<T>()
                 .unwrap();
@@ -136,7 +143,7 @@ impl QueryClient {
             .ok_or(QueryError::NoCacheValue)
             .and_then(|query| {
                 query
-                    .cache_value
+                    .value
                     .clone()
                     .downcast::<T>()
                     .map_err(|_| QueryError::type_mismatch::<T>())
@@ -253,7 +260,11 @@ impl QueryClientBuilder {
     }
 }
 
-async fn do_fetch<T: 'static>(fetcher: &Fetcher<T>, retrier: Option<&Retryer>) -> Result<T, Error> {
+async fn fetch_with_retry<F, T>(fetcher: &F, retrier: Option<&Retryer>) -> Result<T, Error>
+where
+    F: Fetch<T> + 'static,
+    T: 'static,
+{
     let mut ret = fetcher.get().await;
 
     if ret.is_ok() {

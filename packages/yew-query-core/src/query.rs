@@ -1,6 +1,6 @@
 use crate::{fetcher::InfiniteFetcher, timeout::Timeout};
 
-use super::{error::QueryError, fetcher::Fetcher};
+use super::{error::QueryError, fetcher::BoxFetcher};
 use instant::Instant;
 use std::{
     any::{Any, TypeId},
@@ -12,7 +12,7 @@ use std::{
 
 pub(crate) struct SingleQuery {
     data: Rc<dyn Any>,
-    fetcher: Fetcher<Rc<dyn Any>>,
+    fetcher: BoxFetcher<Rc<dyn Any>>,
 }
 
 pub(crate) struct InfiniteQuery {
@@ -26,8 +26,8 @@ pub(crate) enum QueryData {
 }
 
 pub struct Query {
-    pub(crate) fetcher: Fetcher<Rc<dyn Any>>,
-    pub(crate) cache_value: Rc<dyn Any>,
+    pub(crate) fetcher: BoxFetcher<Rc<dyn Any>>,
+    pub(crate) value: Rc<dyn Any>,
     pub(crate) updated_at: Instant,
     pub(crate) timeout: Option<Timeout>,
 }
@@ -42,16 +42,16 @@ impl Query {
         if self.is_stale_by_time(stale_time) {
             None
         } else {
-            Some(&self.cache_value)
+            Some(&self.value)
         }
     }
 
     pub(crate) fn set_value<T: 'static>(&mut self, value: T) -> Result<(), QueryError> {
-        if self.cache_value.type_id() != TypeId::of::<T>() {
+        if self.value.type_id() != TypeId::of::<T>() {
             return Err(QueryError::type_mismatch::<T>());
         }
 
-        self.cache_value = Rc::new(value);
+        self.value = Rc::new(value);
         self.updated_at = Instant::now();
         Ok(())
     }

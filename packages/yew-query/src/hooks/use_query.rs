@@ -1,42 +1,40 @@
 use super::common::Callback;
-use futures::Future;
-use std::{
-    cell::{Cell, RefCell},
-    fmt::Debug,
-    ops::Deref,
-    rc::Rc,
-};
-use wasm_bindgen_futures::spawn_local;
-use web_sys::AbortSignal;
-use yew::{use_effect_with_deps, use_mut_ref, use_state, virtual_dom::Key, UseStateHandle};
-
 use super::{
     common::{
         use_abort_controller, use_callback, use_is_first_render, use_on_online, use_on_window_focus,
     },
     use_query_client::use_query_client,
 };
+use futures::Future;
+use std::{
+    cell::{Cell, RefCell},
+    fmt::Debug,
+    rc::Rc,
+};
+use wasm_bindgen_futures::spawn_local;
+use web_sys::AbortSignal;
+use yew::{use_effect_with_deps, use_mut_ref, use_state, virtual_dom::Key, UseStateHandle};
 use yew_query_core::{client::QueryClient, Error};
 
-pub enum QueryState<T> {
+pub enum QueryState {
     Idle,
     Loading,
-    Ready(Rc<T>),
+    Ready,
     Failed(Error),
 }
 
-impl<T> Debug for QueryState<T> {
+impl Debug for QueryState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Idle => write!(f, "Idle"),
             Self::Loading => write!(f, "Loading"),
-            Self::Ready(_) => write!(f, "Ready"),
+            Self::Ready => write!(f, "Ready"),
             Self::Failed(err) => write!(f, "Failed({err:?})"),
         }
     }
 }
 
-impl<T> QueryState<T> {
+impl QueryState {
     pub fn is_idle(&self) -> bool {
         matches!(&*self, QueryState::Idle)
     }
@@ -46,7 +44,7 @@ impl<T> QueryState<T> {
     }
 
     pub fn is_ready(&self) -> bool {
-        matches!(&*self, QueryState::Ready(_))
+        matches!(&*self, QueryState::Ready)
     }
 
     pub fn is_error(&self) -> bool {
@@ -132,8 +130,10 @@ struct Refetcher {
 #[derive(Debug)]
 pub struct UseQueryHandle<T> {
     key: Key,
-    state: UseStateHandle<QueryState<T>>,
+    state: UseStateHandle<QueryState>,
+    data: UseStateHandle<Option<Rc<T>>>,
     client: Rc<RefCell<QueryClient>>,
+    is_fetching: UseStateHandle<bool>,
     refetcher: Refetcher,
 }
 
@@ -143,10 +143,11 @@ impl<T> UseQueryHandle<T> {
     }
 
     pub fn data(&self) -> Option<&T> {
-        match &*self.state {
-            QueryState::Ready(x) => Some(x.as_ref()),
-            _ => None,
+        if self.state.is_error() {
+            return None;
         }
+
+        self.data.as_deref()
     }
 
     pub fn error(&self) -> Option<&Error> {
@@ -156,24 +157,36 @@ impl<T> UseQueryHandle<T> {
         }
     }
 
+    pub fn is_idle(&self) -> bool {
+        self.state.is_idle()
+    }
+
     pub fn is_refetching(&self) -> bool {
         *self.refetcher.is_refetching
+    }
+
+    pub fn is_loading(&self) -> bool {
+        self.state.is_loading()
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.state.is_ready()
+    }
+
+    pub fn is_error(&self) -> bool {
+        self.state.is_error()
     }
 
     pub fn refetch(&self) {
         self.refetcher.callback.emit(());
     }
 
+    pub fn is_fetching(&self) -> bool {
+        *self.is_fetching
+    }
+
     pub fn remove(&self) {
         self.client.borrow_mut().remove_query_data(&self.key);
-    }
-}
-
-impl<T> Deref for UseQueryHandle<T> {
-    type Target = QueryState<T>;
-
-    fn deref(&self) -> &Self::Target {
-        &*self.state
     }
 }
 
@@ -216,24 +229,30 @@ where
 
     let client = use_query_client().expect("expected `QueryClient`");
     let state = use_state(|| QueryState::Idle);
+    let data = use_state(|| None);
     let refetching = use_state(|| false);
     let last_id = use_mut_ref(|| Cell::new(0_usize));
     let first_render = use_is_first_render();
+    let is_fetching = use_state(|| false);
     let abort_controller = use_abort_controller();
 
     let do_fetch = {
         let state = state.clone();
+        let data = data.clone();
         let refetching = refetching.clone();
         let abort_controller = abort_controller.clone();
         let client = client.clone();
+        let is_fetching = is_fetching.clone();
 
         use_callback(
             move |(), deps| {
                 let state = state.clone();
+                let data = data.clone();
                 let refetching = refetching.clone();
                 let fetch = fetch.clone();
                 let client = client.clone();
                 let last_id = last_id.clone();
+                let is_fetching = is_fetching.clone();
 
                 //
                 let signal = abort_controller.signal();
@@ -244,8 +263,12 @@ where
                     return;
                 }
 
-                state.set(QueryState::Loading);
-                log::trace!("loading: {key}");
+                if data.is_none() {
+                    state.set(QueryState::Loading);
+                    log::trace!("loading: {key}");
+                }
+
+                is_fetching.set(true);
 
                 let id = last_id.borrow().get().wrapping_add(1);
                 last_id.borrow().set(id);
@@ -270,13 +293,17 @@ where
                             }
                             Ok(x) => {
                                 log::trace!("fetch success: {key}");
-                                state.set(QueryState::Ready(x));
+                                state.set(QueryState::Ready);
+                                data.set(Some(x));
                             }
                             Err(e) => {
                                 log::trace!("fetch failed: {key}");
                                 state.set(QueryState::Failed(e));
                             }
                         }
+
+                        // Done
+                        is_fetching.set(false);
                     }
                 });
             },
@@ -367,7 +394,9 @@ where
     UseQueryHandle {
         key,
         state,
+        data,
         client,
         refetcher,
+        is_fetching,
     }
 }

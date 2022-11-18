@@ -81,7 +81,8 @@ fn app() -> Html {
     let client = Rc::new(RefCell::new(
         QueryClient::builder()
             .stale_time(Duration::from_secs(10))
-            .build(HashMap::new()),
+            .cache(HashMap::new())
+            .build(),
     ));
 
     html! {
