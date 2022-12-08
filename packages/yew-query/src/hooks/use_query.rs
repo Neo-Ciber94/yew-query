@@ -236,6 +236,8 @@ where
     let is_fetching = use_state(|| false);
     let abort_controller = use_abort_controller();
 
+    log::info!("State: {:?}", &*last_id);
+
     let do_fetch = {
         let state = state.clone();
         let data = data.clone();
@@ -400,3 +402,4 @@ where
         is_fetching,
     }
 }
+

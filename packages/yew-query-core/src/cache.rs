@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
 use yew::virtual_dom::Key;
 
-/// Provides a way to cache data.
+/// Provides a way to store the query data.
 pub trait QueryCache: Debug {
     /// Returns the cache entry with the given key.
     fn get(&self, key: &Key) -> Option<&Query>;
