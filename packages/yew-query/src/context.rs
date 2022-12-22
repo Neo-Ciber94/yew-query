@@ -34,8 +34,8 @@ impl PartialEq for QueryClientContextProps {
     }
 }
 
-#[function_component(QueryClientProvider)]
-pub fn query_client_provider(props: &QueryClientContextProps) -> yew::Html {
+#[function_component]
+pub fn QueryClientProvider(props: &QueryClientContextProps) -> yew::Html {
     let context = QueryClientContext {
         client: props.client.clone(),
     };
