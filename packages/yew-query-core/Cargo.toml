@@ -17,3 +17,4 @@ web-sys = { version = "0.3.60", features = [
     "Navigator",
 ] }
 instant = { version = "0.1", features = ["wasm-bindgen", "inaccurate"] }
+log = "0.4.17"

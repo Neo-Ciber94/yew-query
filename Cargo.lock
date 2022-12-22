@@ -902,6 +902,7 @@ version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "instant",
+ "log",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

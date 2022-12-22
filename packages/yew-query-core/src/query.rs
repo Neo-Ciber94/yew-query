@@ -7,7 +7,6 @@ use std::{
     time::Duration,
 };
 
-
 pub struct Query {
     pub(crate) fetcher: BoxFetcher<Rc<dyn Any>>,
     pub(crate) value: Rc<dyn Any>,

@@ -5,10 +5,12 @@ use std::time::Duration;
 
 use log::Level;
 use serde::{Deserialize, Serialize};
+use yew::platform::time::sleep;
 use yew::prelude::*;
-use yew_query::QueryClientProvider;
-use yew_query::QueryClient;
 use yew_query::use_query;
+use yew_query::use_query_base::use_query_base;
+use yew_query::QueryClient;
+use yew_query::QueryClientProvider;
 
 #[derive(Default, Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -19,9 +21,9 @@ pub struct Post {
     pub body: String,
 }
 
-#[function_component(PostList)]
-fn post_list() -> Html {
-    let query = use_query("posts", fetch_posts);
+#[function_component]
+fn PostList() -> Html {
+    let query = use_query_base("posts", fetch_posts);
 
     if query.is_loading() {
         return html! {
@@ -53,8 +55,8 @@ fn post_list() -> Html {
     }
 }
 
-#[function_component(Content)]
-fn content() -> Html {
+#[function_component]
+fn Content() -> Html {
     let show = use_state(|| false);
 
     let toggle_show = {
@@ -76,8 +78,8 @@ fn content() -> Html {
     }
 }
 
-#[function_component(App)]
-fn app() -> Html {
+#[function_component]
+fn App() -> Html {
     let client = Rc::new(RefCell::new(
         QueryClient::builder()
             .stale_time(Duration::from_secs(10))
@@ -94,11 +96,11 @@ fn app() -> Html {
 
 fn main() {
     wasm_logger::init(wasm_logger::Config::new(Level::Trace));
-
-    yew::start_app::<App>();
+    yew::Renderer::<App>::new().render();
 }
 
 async fn fetch_posts() -> reqwest::Result<Vec<Post>> {
+    sleep(Duration::from_secs(2)).await;
     reqwest::get("https://jsonplaceholder.typicode.com/posts")
         .await?
         .json::<Vec<Post>>()

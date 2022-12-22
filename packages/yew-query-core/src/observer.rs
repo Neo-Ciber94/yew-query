@@ -10,7 +10,7 @@ pub enum QueryState {
     Idle,
     Loading,
     Ready,
-    Error(Error),
+    Failed(Error),
 }
 
 pub struct QueryEvent<T> {
@@ -51,21 +51,25 @@ where
         E: Into<Error> + 'static,
         C: Fn(QueryEvent<T>) + 'static,
     {
-        let client = self.client.borrow();
         let key = &self.key;
+        let client = self.client.borrow();
+        let is_cached = client.contains_key(key);
 
         // If the value is cached and still fresh return
-        if !client.is_stale(key) {
+        if is_cached && !client.is_stale(key) {
+            log::trace!("{key} is cached");
+            let value = self.get_last_value();
+            debug_assert!(value.is_some());
+
             callback(QueryEvent {
                 state: QueryState::Ready,
                 is_fetching: false,
-                value: self.get_last_value(),
+                value,
             });
             return;
         }
 
         // If value is not in cache we set the loading state
-        let is_cached = !client.contains_key(key);
 
         if is_cached {
             callback(QueryEvent {
@@ -87,6 +91,7 @@ where
         spawn_local(async move {
             let mut client = client.borrow_mut();
             let ret = client.fetch_query(key, fetch).await;
+            log::trace!("fetching...");
 
             match ret {
                 Ok(value) => callback(QueryEvent {
@@ -95,7 +100,7 @@ where
                     value: Some(value),
                 }),
                 Err(err) => callback(QueryEvent {
-                    state: QueryState::Error(err.into()),
+                    state: QueryState::Failed(err.into()),
                     is_fetching: false,
                     value: None,
                 }),
