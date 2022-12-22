@@ -70,7 +70,6 @@ where
         }
 
         // If value is not in cache we set the loading state
-
         if is_cached {
             callback(QueryEvent {
                 state: QueryState::Idle,
@@ -85,13 +84,12 @@ where
             });
         }
 
-        let client = self.client.clone();
         let key = key.clone();
+        let client = self.client.clone();
 
         spawn_local(async move {
             let mut client = client.borrow_mut();
             let ret = client.fetch_query(key, fetch).await;
-            log::trace!("fetching...");
 
             match ret {
                 Ok(value) => callback(QueryEvent {

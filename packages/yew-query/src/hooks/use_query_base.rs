@@ -1,14 +1,15 @@
-use std::rc::Rc;
-
 use super::use_query_client;
 use crate::common::{
     use_abort_controller, use_is_first_render, use_on_online, use_on_window_focus,
 };
 use futures::Future;
+use std::rc::Rc;
+use std::sync::Mutex;
 use web_sys::AbortSignal;
 use yew::virtual_dom::Key;
 use yew::{
-    hook, use_callback, use_effect, use_effect_with_deps, use_state, Callback, UseStateHandle,
+    hook, use_callback, use_effect, use_effect_with_deps, use_mut_ref, use_state, Callback,
+    UseStateHandle,
 };
 use yew_query_core::observer::QueryEvent;
 use yew_query_core::{
@@ -99,7 +100,7 @@ impl<T> UseQueryHandle<T> {
     pub fn error(&self) -> Option<&Error> {
         match &*self.state {
             QueryState::Failed(err) => Some(err),
-            _ => None
+            _ => None,
         }
     }
 
@@ -153,7 +154,9 @@ where
 }
 
 #[hook]
-pub fn use_query_base_with_options<Fut, T, E>(options: UseQueryOptions<Fut, T, E>) -> UseQueryHandle<T>
+pub fn use_query_base_with_options<Fut, T, E>(
+    options: UseQueryOptions<Fut, T, E>,
+) -> UseQueryHandle<T>
 where
     Fut: Future<Output = Result<T, E>> + 'static,
     T: 'static,
@@ -179,20 +182,27 @@ where
         use_state(move || last_value)
     };
 
+    let latest_id = use_state(|| std::cell::Cell::new(0_u32));
+
     let do_fetch = {
         let query_value = query_value.clone();
         let query_state = query_state.clone();
         let query_fetching = query_fetching.clone();
         let fetch = fetch.clone();
+        let latest_id = latest_id.clone();
         let abort_controller = abort_controller.clone();
 
         use_callback(
             move |(), deps| {
                 let enabled = deps.0;
+                let self_id = latest_id.get().wrapping_add(1);
+                (*latest_id).set(self_id);
+
                 let query_value = query_value.clone();
                 let query_state = query_state.clone();
                 let query_fetching = query_fetching.clone();
-
+                let latest_id = latest_id.clone();
+                
                 let signal = abort_controller.signal();
                 let fetch = fetch.clone();
                 let f = move || fetch(signal.clone());
@@ -208,9 +218,11 @@ where
                         is_fetching,
                     } = event;
 
-                    query_value.set(value);
-                    query_state.set(state);
-                    query_fetching.set(is_fetching);
+                    if latest_id.get() == self_id {
+                        query_value.set(value);
+                        query_state.set(state);
+                        query_fetching.set(is_fetching);
+                    }
                 });
             },
             (enabled, key.clone()),
@@ -234,15 +246,18 @@ where
     {
         let do_fetch = do_fetch.clone();
         let key = key.clone();
-        use_effect_with_deps(move |_| {
-            log::trace!("fetching: {key}");
-            do_fetch.emit(());
+        use_effect_with_deps(
+            move |_| {
+                log::trace!("fetching: {key}");
+                do_fetch.emit(());
 
-            move || {
-                log::trace!("unmount");
-                abort_controller.abort();
-            }
-        }, ());
+                move || {
+                    log::trace!("unmount");
+                    abort_controller.abort();
+                }
+            },
+            (),
+        );
     }
 
     // On mount
@@ -250,12 +265,15 @@ where
         let do_fetch = do_fetch.clone();
         let key = key.clone();
 
-        use_effect_with_deps(move |_| {
-            if !first_render && refetch_on_mount {
-                log::trace!("refetching on mount: {key}");
-                do_fetch.emit(());
-            }
-        }, ())
+        use_effect_with_deps(
+            move |_| {
+                if !first_render && refetch_on_mount {
+                    log::trace!("refetching on mount: {key}");
+                    do_fetch.emit(());
+                }
+            },
+            (),
+        )
     }
 
     // On online
