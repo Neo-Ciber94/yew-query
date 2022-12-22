@@ -1,8 +1,5 @@
-use super::common::Callback;
 use super::{
-    common::{
-        use_abort_controller, use_callback, use_is_first_render, use_on_online, use_on_window_focus,
-    },
+    common::{use_abort_controller, use_is_first_render, use_on_online, use_on_window_focus},
     use_query_client::use_query_client,
 };
 use futures::Future;
@@ -13,6 +10,7 @@ use std::{
 };
 use wasm_bindgen_futures::spawn_local;
 use web_sys::AbortSignal;
+use yew::{hook, Callback};
 use yew::{use_effect_with_deps, use_mut_ref, use_state, virtual_dom::Key, UseStateHandle};
 use yew_query_core::{client::QueryClient, Error};
 
@@ -190,6 +188,7 @@ impl<T> UseQueryHandle<T> {
     }
 }
 
+#[hook]
 pub fn use_query<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn() -> Fut + 'static,
@@ -201,6 +200,7 @@ where
     use_query_with_options(UseQueryOptions::new(key.into(), fetcher))
 }
 
+#[hook]
 pub fn use_query_with_signal<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn(AbortSignal) -> Fut + 'static,
@@ -212,6 +212,7 @@ where
     use_query_with_options(UseQueryOptions::new_abortable(key.into(), fetcher))
 }
 
+#[hook]
 pub fn use_query_with_options<Fut, T, E>(options: UseQueryOptions<Fut, T, E>) -> UseQueryHandle<T>
 where
     Fut: Future<Output = Result<T, E>> + 'static,
@@ -246,7 +247,7 @@ where
         let client = client.clone();
         let is_fetching = is_fetching.clone();
 
-        use_callback(
+        yew::use_callback(
             move |(), deps| {
                 let state = state.clone();
                 let data = data.clone();
@@ -402,4 +403,3 @@ where
         is_fetching,
     }
 }
-

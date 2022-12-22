@@ -2,11 +2,11 @@ pub mod cache;
 pub mod client;
 pub mod error;
 pub mod fetcher;
-pub mod infinite;
 pub mod query;
 pub mod retry;
+pub mod observer;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
-//
-pub(crate) mod timeout;
+#[doc(hidden)]
+pub mod timeout;

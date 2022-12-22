@@ -1,8 +1,9 @@
 use web_sys::AbortController;
-use yew::{use_effect, use_mut_ref};
+use yew::{use_effect, use_mut_ref, hook};
 
 use super::use_is_first_render;
 
+#[hook]
 pub fn use_abort_controller() -> AbortController {
     let controller_ref = use_mut_ref(get_abort_controller);
     let controller = {

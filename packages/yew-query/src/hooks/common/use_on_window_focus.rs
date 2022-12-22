@@ -1,7 +1,8 @@
 use super::use_is_first_render::use_is_first_render;
 use crate::listener::EventListener;
-use yew::use_effect_with_deps;
+use yew::{use_effect_with_deps, hook};
 
+#[hook]
 pub fn use_on_window_focus<F>(callback: F)
 where
     F: Fn() + 'static,

@@ -7,7 +7,7 @@ keywords = ["wasm", "async"]
 license = "MIT"
 
 [dependencies]
-yew = "0.19.3"
+yew = "0.20"
 futures = "0.3.25"
 wasm-bindgen = "0.2.83"
 wasm-bindgen-futures = "0.4.33"

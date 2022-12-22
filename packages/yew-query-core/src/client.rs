@@ -1,14 +1,10 @@
 use super::{
     cache::QueryCache, error::QueryError, fetcher::BoxFetcher, query::Query, retry::Retryer, Error,
 };
-use crate::{fetcher::Fetch, timeout::Timeout};
+use crate::fetcher::Fetch;
 use futures::TryFutureExt;
 use instant::Instant;
-use std::{
-    any::Any, cell::RefCell, collections::HashMap, fmt::Debug, future::Future, rc::Rc, sync::Arc,
-    time::Duration,
-};
-use wasm_bindgen::JsValue;
+use std::{any::Any, collections::HashMap, fmt::Debug, future::Future, rc::Rc, time::Duration};
 use yew::virtual_dom::Key;
 
 pub struct QueryClient {
@@ -31,7 +27,7 @@ impl QueryClient {
     }
 
     pub fn contains_key(&self, key: &Key) -> bool {
-        return self.cache.has(key)
+        return self.cache.has(key);
     }
 
     pub async fn fetch_query<F, Fut, T, E>(&mut self, key: Key, f: F) -> Result<Rc<T>, Error>
@@ -100,32 +96,6 @@ impl QueryClient {
         } else {
             Err(QueryError::key_not_found(&key).into())
         }
-    }
-
-    pub async fn fetch_infinite_query<F, Fut, T, E>(
-        &mut self,
-        key: Key,
-        param: usize,
-        f: F,
-    ) -> Result<Rc<Vec<T>>, Error>
-    where
-        F: Fn(usize) -> Fut + 'static,
-        Fut: Future<Output = Option<Result<T, E>>> + 'static,
-        T: 'static,
-        E: Into<Error> + 'static,
-    {
-        todo!()
-    }
-
-    pub async fn refetch_infinite_query<T>(
-        &mut self,
-        key: Key,
-        param: usize,
-    ) -> Result<Rc<Vec<T>>, Error>
-    where
-        T: 'static,
-    {
-        todo!()
     }
 
     pub fn get_query_data<T: 'static>(&self, key: &Key) -> Result<Rc<T>, QueryError> {

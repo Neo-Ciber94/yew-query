@@ -7,11 +7,5 @@ pub use use_on_online::*;
 mod use_on_window_focus;
 pub use use_on_window_focus::*;
 
-mod use_memo;
-pub use use_memo::*;
-
-mod use_callback;
-pub use use_callback::*;
-
 mod use_abort_controller;
 pub use use_abort_controller::*;

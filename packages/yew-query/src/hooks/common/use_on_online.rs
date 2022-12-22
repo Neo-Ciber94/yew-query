@@ -1,6 +1,7 @@
 use crate::listener::EventListener;
-use yew::use_effect_with_deps;
+use yew::{use_effect_with_deps, hook};
 
+#[hook]
 pub fn use_on_online<F>(callback: F)
 where
     F: Fn() + 'static,
