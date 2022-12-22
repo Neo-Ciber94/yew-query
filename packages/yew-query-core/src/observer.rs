@@ -53,18 +53,18 @@ where
     {
         let key = &self.key;
         let client = self.client.borrow();
+        let last_value = self.get_last_value();
         let is_cached = client.contains_key(key);
 
         // If the value is cached and still fresh return
         if is_cached && !client.is_stale(key) {
             log::trace!("{key} is cached");
-            let value = self.get_last_value();
-            debug_assert!(value.is_some());
+            debug_assert!(last_value.is_some());
 
             callback(QueryEvent {
                 state: QueryState::Ready,
                 is_fetching: false,
-                value,
+                value: last_value,
             });
             return;
         }
@@ -74,7 +74,7 @@ where
             callback(QueryEvent {
                 state: QueryState::Idle,
                 is_fetching: true,
-                value: None,
+                value: last_value,
             });
         } else {
             callback(QueryEvent {

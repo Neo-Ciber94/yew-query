@@ -70,7 +70,7 @@ fn Content() -> Html {
 
     html! {
         <>
-            <button onclick={toggle_show}>{"Show"}</button>
+            <button onclick={toggle_show}>{if *show { "Hide" } else { "Show" } }</button>
             if *show {
                 <PostList/>
             }
@@ -82,7 +82,7 @@ fn Content() -> Html {
 fn App() -> Html {
     let client = Rc::new(RefCell::new(
         QueryClient::builder()
-            .stale_time(Duration::from_secs(10))
+            .stale_time(Duration::from_secs(3))
             .cache(HashMap::new())
             .build(),
     ));
