@@ -6,16 +6,14 @@ use futures::Future;
 use std::rc::Rc;
 use web_sys::AbortSignal;
 use yew::virtual_dom::Key;
-use yew::{
-    hook, use_callback, use_effect_with_deps, use_state, Callback,
-    UseStateHandle,
-};
+use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle};
 use yew_query_core::observer::QueryEvent;
 use yew_query_core::{
     observer::{QueryObserver, QueryState},
     Error,
 };
 
+/// Options for a `use_query`.
 pub struct UseQueryOptions<Fut, T, E>
 where
     Fut: Future<Output = Result<T, E>>,
@@ -36,6 +34,7 @@ where
     T: 'static,
     E: Into<Error> + 'static,
 {
+    /// Constructs a new `UseQueryOptions` with an abort signal.
     pub fn new_abortable<K, F>(key: K, fetch: F) -> Self
     where
         F: Fn(AbortSignal) -> Fut + 'static,
@@ -54,6 +53,7 @@ where
         }
     }
 
+    /// Constructs a new `UseQueryOptions`.
     pub fn new<K, F>(key: K, fetch: F) -> Self
     where
         K: Into<Key>,
@@ -62,27 +62,32 @@ where
         Self::new_abortable(key, move |_| fetch())
     }
 
+    /// Sets a value for enable for disable this query.
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
     }
 
+    /// Sets a value indicating whether if refetch the data on mount.
     pub fn refetch_on_mount(mut self, refetch_on_mount: bool) -> Self {
         self.refetch_on_mount = refetch_on_mount;
         self
     }
 
+    /// Sets a value indicating whether if refetch on reconnection.
     pub fn refetch_on_reconnect(mut self, refetch_on_reconnect: bool) -> Self {
         self.refetch_on_reconnect = refetch_on_reconnect;
         self
     }
 
+    /// Sets a value indicating whether if refetch when window is focused.
     pub fn refetch_on_window_focus(mut self, refetch_on_window_focus: bool) -> Self {
         self.refetch_on_window_focus = refetch_on_window_focus;
         self
     }
 }
 
+/// Handle returned by `use_query`.
 pub struct UseQueryHandle<T> {
     key: Key,
     fetch: Callback<()>,
@@ -92,10 +97,12 @@ pub struct UseQueryHandle<T> {
 }
 
 impl<T> UseQueryHandle<T> {
+    /// Returns the currently available data.
     pub fn data(&self) -> Option<&T> {
         self.value.as_deref()
     }
 
+    /// Returns a error that ocurred during the fetching, if any.
     pub fn error(&self) -> Option<&Error> {
         match &*self.state {
             QueryState::Failed(err) => Some(err),
@@ -103,31 +110,53 @@ impl<T> UseQueryHandle<T> {
         }
     }
 
+    /// Returns the current state of the query.
     pub fn state(&self) -> &QueryState {
         &self.state
     }
 
+    /// Returns the key used to identify the query.
+    pub fn key(&self) -> &Key {
+        &self.key
+    }
+
+    /// Returns `true` if the query is idle.
     pub fn is_idle(&self) -> bool {
         matches!(self.state(), QueryState::Idle)
     }
 
+    /// Returns `true` if the query has no data and is loading.
     pub fn is_loading(&self) -> bool {
         matches!(self.state(), QueryState::Loading)
     }
 
+    /// Returns `true` if is fetching data.
     pub fn is_fetching(&self) -> bool {
         self.is_fetching
     }
 
+    /// Returns `true` if has an error.
     pub fn is_error(&self) -> bool {
         matches!(self.state(), QueryState::Failed(_))
     }
 
+    /// Returns `true` if the data is available.
     pub fn is_ready(&self) -> bool {
         matches!(self.state(), QueryState::Ready)
     }
+
+    /// Refetch ths data.
+    pub fn refetch(&self) {
+        self.fetch.emit(());
+    }
+
+    /// Removes the query data.
+    pub fn remove(&self) {
+        todo!()
+    }
 }
 
+/// This hook allows to observe the result and state of a future.
 #[hook]
 pub fn use_query<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
@@ -140,6 +169,7 @@ where
     use_query_with_options(UseQueryOptions::new(key.into(), fetcher))
 }
 
+/// This hook allows to observe the result and state of a future with a abort signal.
 #[hook]
 pub fn use_query_with_signal<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
@@ -152,10 +182,9 @@ where
     use_query_with_options(UseQueryOptions::new_abortable(key.into(), fetcher))
 }
 
+/// This hook allows to observe the result and state of a future using the given `UseQueryOptions`.
 #[hook]
-pub fn use_query_with_options<Fut, T, E>(
-    options: UseQueryOptions<Fut, T, E>,
-) -> UseQueryHandle<T>
+pub fn use_query_with_options<Fut, T, E>(options: UseQueryOptions<Fut, T, E>) -> UseQueryHandle<T>
 where
     Fut: Future<Output = Result<T, E>> + 'static,
     T: 'static,
@@ -201,7 +230,7 @@ where
                 let query_state = query_state.clone();
                 let query_fetching = query_fetching.clone();
                 let latest_id = latest_id.clone();
-                
+
                 let signal = abort_controller.signal();
                 let fetch = fetch.clone();
                 let f = move || fetch(signal.clone());
