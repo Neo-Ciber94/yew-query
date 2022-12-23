@@ -4,11 +4,15 @@ use super::{
 use crate::fetcher::Fetch;
 use futures::TryFutureExt;
 use instant::Instant;
-use std::{any::Any, collections::HashMap, fmt::Debug, future::Future, rc::Rc, time::Duration};
+use std::{
+    any::Any, cell::RefCell, collections::HashMap, fmt::Debug, future::Future, rc::Rc,
+    time::Duration,
+};
 use yew::virtual_dom::Key;
 
+#[derive(Clone)]
 pub struct QueryClient {
-    cache: Box<dyn QueryCache>,
+    cache: Rc<RefCell<dyn QueryCache>>,
     stale_time: Option<Duration>,
     retry: Option<Retryer>,
 }
@@ -19,7 +23,8 @@ impl QueryClient {
     }
 
     pub fn is_stale(&self, key: &Key) -> bool {
-        if let Some(query) = self.cache.get(key) {
+        let cache = self.cache.borrow();
+        if let Some(query) = cache.get(key) {
             query.is_stale()
         } else {
             false
@@ -27,7 +32,8 @@ impl QueryClient {
     }
 
     pub fn contains_key(&self, key: &Key) -> bool {
-        return self.cache.has(key);
+        let cache = self.cache.borrow();
+        return cache.has(key);
     }
 
     pub async fn fetch_query<F, Fut, T, E>(&mut self, key: Key, f: F) -> Result<Rc<T>, Error>
@@ -39,7 +45,8 @@ impl QueryClient {
     {
         // Get value if cached
         if !self.is_stale(&key) {
-            if let Some(query) = self.cache.get(&key) {
+            let cache = self.cache.borrow();
+            if let Some(query) = cache.get(&key) {
                 return Ok(query.value.clone().downcast::<T>().unwrap());
             }
         }
@@ -55,7 +62,9 @@ impl QueryClient {
         let value = fetch_with_retry(&fetcher, retrier).await?;
         let updated_at = Instant::now();
 
-        self.cache.set(
+        let mut cache = self.cache.borrow_mut();
+
+        cache.set(
             key.clone(),
             Query {
                 value,
@@ -65,8 +74,7 @@ impl QueryClient {
             },
         );
 
-        let ret = self
-            .cache
+        let ret = cache
             .get(&key)
             .map(|x| x.value.clone())
             .map(|x| x.downcast::<T>().unwrap())
@@ -76,7 +84,10 @@ impl QueryClient {
     }
 
     pub async fn refetch_query<T: 'static>(&mut self, key: Key) -> Result<Rc<T>, Error> {
-        if let Some(query) = self.cache.get_mut(&key) {
+        let mut cache = self.cache.borrow_mut();
+        if let Some(query) = cache.get_mut(&key) {
+            // drop(cache);
+
             let retrier = self.retry.as_ref();
             let fetcher = &query.fetcher;
             let value = fetch_with_retry(fetcher, retrier).await?;
@@ -84,8 +95,9 @@ impl QueryClient {
             query.value = value;
             query.updated_at = Instant::now();
 
-            let ret = self
-                .cache
+            let cache = self.cache.borrow();
+
+            let ret = cache
                 .get(&key)
                 .map(|x| x.value.clone())
                 .unwrap() // SAFETY: value was added to cache
@@ -99,7 +111,8 @@ impl QueryClient {
     }
 
     pub fn get_query_data<T: 'static>(&self, key: &Key) -> Result<Rc<T>, QueryError> {
-        self.cache
+        let mut cache = self.cache.borrow();
+        cache
             .get(key)
             .ok_or(QueryError::NoCacheValue)
             .and_then(|query| {
@@ -112,7 +125,8 @@ impl QueryClient {
     }
 
     pub fn set_query_data<T: 'static>(&mut self, key: Key, value: T) -> Result<(), QueryError> {
-        if let Some(query) = self.cache.get_mut(&key) {
+        let mut cache = self.cache.borrow_mut();
+        if let Some(query) = cache.get_mut(&key) {
             let ret = query.set_value(value);
             ret
         } else {
@@ -121,11 +135,19 @@ impl QueryClient {
     }
 
     pub fn remove_query_data(&mut self, key: &Key) {
-        self.cache.remove(key);
+        let mut cache = self.cache.borrow_mut();
+        cache.remove(key);
     }
 
     pub fn clear_queries(&mut self) {
-        self.cache.clear();
+        let mut cache = self.cache.borrow_mut();
+        cache.clear();
+    }
+}
+
+impl PartialEq for QueryClient {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.cache, &other.cache)
     }
 }
 
@@ -141,9 +163,9 @@ impl Debug for QueryClient {
 
 #[derive(Default)]
 pub struct QueryClientBuilder {
+    cache: Option<Rc<RefCell<dyn QueryCache>>>,
     stale_time: Option<Duration>,
     retry: Option<Retryer>,
-    cache: Option<Box<dyn QueryCache>>,
 }
 
 impl QueryClientBuilder {
@@ -169,7 +191,7 @@ impl QueryClientBuilder {
     where
         C: QueryCache + 'static,
     {
-        self.cache = Some(Box::new(cache));
+        self.cache = Some(Rc::new(RefCell::new(cache)));
         self
     }
 
@@ -180,7 +202,9 @@ impl QueryClientBuilder {
             cache,
         } = self;
 
-        let cache = cache.or_else(|| Some(Box::new(HashMap::new()))).unwrap();
+        let cache = cache
+            .or_else(|| Some(Rc::new(RefCell::new(HashMap::new()))))
+            .unwrap();
 
         QueryClient {
             cache,

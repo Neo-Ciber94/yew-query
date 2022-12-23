@@ -20,7 +20,7 @@ pub struct QueryEvent<T> {
 }
 
 pub struct QueryObserver<T> {
-    client: Rc<RefCell<QueryClient>>,
+    client: QueryClient,
     key: Key,
     _marker: PhantomData<T>,
 }
@@ -29,7 +29,7 @@ impl<T> QueryObserver<T>
 where
     T: 'static,
 {
-    pub fn new(client: Rc<RefCell<QueryClient>>, key: Key) -> Self {
+    pub fn new(client: QueryClient, key: Key) -> Self {
         QueryObserver {
             client,
             key,
@@ -39,8 +39,7 @@ where
 
     pub fn get_last_value(&self) -> Option<Rc<T>> {
         let key = &self.key;
-        let client = self.client.borrow();
-        let value = client.get_query_data(key);
+        let value = self.client.get_query_data(key);
         value.ok()
     }
 
@@ -52,12 +51,11 @@ where
         C: Fn(QueryEvent<T>) + 'static,
     {
         let key = &self.key;
-        let client = self.client.borrow();
         let last_value = self.get_last_value();
-        let is_cached = client.contains_key(key);
+        let is_cached = self.client.contains_key(key);
 
         // If the value is cached and still fresh return
-        if is_cached && !client.is_stale(key) {
+        if is_cached && !self.client.is_stale(key) {
             log::trace!("{key} is cached");
             debug_assert!(last_value.is_some());
 
@@ -88,7 +86,7 @@ where
         let client = self.client.clone();
 
         spawn_local(async move {
-            let mut client = client.borrow_mut();
+            let mut client = client;
             let ret = client.fetch_query(key, fetch).await;
 
             match ret {

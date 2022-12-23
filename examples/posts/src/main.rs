@@ -7,7 +7,6 @@ use log::Level;
 use serde::{Deserialize, Serialize};
 use yew::platform::time::sleep;
 use yew::prelude::*;
-use yew_query::use_query;
 use yew_query::use_query_base::use_query_base;
 use yew_query::QueryClient;
 use yew_query::QueryClientProvider;
@@ -80,12 +79,10 @@ fn Content() -> Html {
 
 #[function_component]
 fn App() -> Html {
-    let client = Rc::new(RefCell::new(
-        QueryClient::builder()
-            .stale_time(Duration::from_secs(3))
-            .cache(HashMap::new())
-            .build(),
-    ));
+    let client = QueryClient::builder()
+        .stale_time(Duration::from_secs(3))
+        .cache(HashMap::new())
+        .build();
 
     html! {
         <QueryClientProvider {client}>

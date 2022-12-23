@@ -1,8 +1,9 @@
-use std::time::Duration;
+use std::{time::Duration, rc::Rc};
 
 pub type Retry = Box<dyn Iterator<Item = Duration>>;
 
-pub struct Retryer(Box<dyn Fn() -> Retry>);
+#[derive(Clone)]
+pub struct Retryer(Rc<dyn Fn() -> Retry>);
 
 impl Retryer {
     pub fn new<F, I>(f: F) -> Self
@@ -10,7 +11,7 @@ impl Retryer {
         F: Fn() -> I + 'static,
         I: Iterator<Item = Duration> + 'static,
     {
-        let f = Box::new(move || {
+        let f = Rc::new(move || {
             let retry = f();
             Box::new(retry) as Retry
         });
