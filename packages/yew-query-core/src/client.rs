@@ -85,29 +85,32 @@ impl QueryClient {
 
     pub async fn refetch_query<T: 'static>(&mut self, key: Key) -> Result<Rc<T>, Error> {
         let mut cache = self.cache.borrow_mut();
-        if let Some(query) = cache.get_mut(&key) {
-            // drop(cache);
+        let query = cache.get_mut(&key);
 
-            let retrier = self.retry.as_ref();
-            let fetcher = &query.fetcher;
-            let value = fetch_with_retry(fetcher, retrier).await?;
+        let Some(query) = query else {
+            return Err(QueryError::key_not_found(&key).into());
+        };
 
-            query.value = value;
-            query.updated_at = Instant::now();
+        // FIXME: We still have the cache borrowed while still refetching
+        // this may lead to a borrow error if other thread attempt to read the cache
+        
+        let retrier = self.retry.as_ref();
+        let fetcher = &query.fetcher;
+        let value = fetch_with_retry(fetcher, retrier).await?;
 
-            let cache = self.cache.borrow();
+        query.value = value;
+        query.updated_at = Instant::now();
 
-            let ret = cache
-                .get(&key)
-                .map(|x| x.value.clone())
-                .unwrap() // SAFETY: value was added to cache
-                .downcast::<T>()
-                .unwrap();
+        let cache = self.cache.borrow();
 
-            Ok(ret)
-        } else {
-            Err(QueryError::key_not_found(&key).into())
-        }
+        let ret = cache
+            .get(&key)
+            .map(|x| x.value.clone())
+            .unwrap() // SAFETY: value was added to cache
+            .downcast::<T>()
+            .unwrap();
+
+        Ok(ret)
     }
 
     pub fn get_query_data<T: 'static>(&self, key: &Key) -> Result<Rc<T>, QueryError> {
