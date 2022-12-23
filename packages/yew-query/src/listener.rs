@@ -16,7 +16,6 @@ impl EventListener {
     where
         F: Fn(Event) + 'static,
     {
-        //let window = window().unwrap();
         let event = event.to_owned();
         let closure = Rc::new(Closure::wrap(
             Box::new(move |e: Event| f(e)) as Box<dyn FnMut(_)>

@@ -7,7 +7,7 @@ use log::Level;
 use serde::{Deserialize, Serialize};
 use yew::platform::time::sleep;
 use yew::prelude::*;
-use yew_query::use_query_base::use_query_base;
+use yew_query::use_query;
 use yew_query::QueryClient;
 use yew_query::QueryClientProvider;
 
@@ -22,7 +22,7 @@ pub struct Post {
 
 #[function_component]
 fn PostList() -> Html {
-    let query = use_query_base("posts", fetch_posts);
+    let query = use_query("posts", fetch_posts);
 
     if query.is_loading() {
         return html! {

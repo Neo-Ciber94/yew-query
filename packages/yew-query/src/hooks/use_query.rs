@@ -129,7 +129,7 @@ impl<T> UseQueryHandle<T> {
 }
 
 #[hook]
-pub fn use_query_base<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
+pub fn use_query<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn() -> Fut + 'static,
     Fut: Future<Output = Result<T, E>> + 'static,
@@ -137,11 +137,11 @@ where
     T: 'static,
     E: Into<Error> + 'static,
 {
-    use_query_base_with_options(UseQueryOptions::new(key.into(), fetcher))
+    use_query_with_options(UseQueryOptions::new(key.into(), fetcher))
 }
 
 #[hook]
-pub fn use_query_base_with_signal<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
+pub fn use_query_with_signal<F, Fut, K, T, E>(key: K, fetcher: F) -> UseQueryHandle<T>
 where
     F: Fn(AbortSignal) -> Fut + 'static,
     Fut: Future<Output = Result<T, E>> + 'static,
@@ -149,11 +149,11 @@ where
     T: 'static,
     E: Into<Error> + 'static,
 {
-    use_query_base_with_options(UseQueryOptions::new_abortable(key.into(), fetcher))
+    use_query_with_options(UseQueryOptions::new_abortable(key.into(), fetcher))
 }
 
 #[hook]
-pub fn use_query_base_with_options<Fut, T, E>(
+pub fn use_query_with_options<Fut, T, E>(
     options: UseQueryOptions<Fut, T, E>,
 ) -> UseQueryHandle<T>
 where
