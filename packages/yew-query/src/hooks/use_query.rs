@@ -7,6 +7,7 @@ use std::rc::Rc;
 use web_sys::AbortSignal;
 use yew::virtual_dom::Key;
 use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle};
+use yew_query_core::key::QueryKey;
 use yew_query_core::observer::QueryEvent;
 use yew_query_core::{
     observer::{QueryObserver, QueryState},
@@ -89,8 +90,9 @@ where
 
 /// Handle returned by `use_query`.
 pub struct UseQueryHandle<T> {
-    key: Key,
+    key: QueryKey,
     fetch: Callback<()>,
+    remove: Callback<()>,
     is_fetching: bool,
     state: UseStateHandle<QueryState>,
     value: UseStateHandle<Option<Rc<T>>>,
@@ -116,7 +118,7 @@ impl<T> UseQueryHandle<T> {
     }
 
     /// Returns the key used to identify the query.
-    pub fn key(&self) -> &Key {
+    pub fn key(&self) -> &QueryKey {
         &self.key
     }
 
@@ -152,7 +154,7 @@ impl<T> UseQueryHandle<T> {
 
     /// Removes the query data.
     pub fn remove(&self) {
-        todo!()
+        self.remove.emit(());
     }
 }
 
@@ -203,6 +205,7 @@ where
     let abort_controller = use_abort_controller();
     let observer = QueryObserver::<T>::new(client.clone(), key.clone());
     let first_render = use_is_first_render();
+    let query_key = QueryKey::of::<T>(key.clone());
     let query_fetching = use_state(|| false);
     let query_state = use_state(|| QueryState::Idle);
     let query_value = {
@@ -210,6 +213,8 @@ where
         use_state(move || last_value)
     };
 
+    // We use an id to ensure only set the last value
+    // https://docs.rs/yew/0.20.0/src/yew/suspense/hooks.rs.html#97
     let latest_id = use_state(|| std::cell::Cell::new(0_u32));
 
     let do_fetch = {
@@ -253,7 +258,28 @@ where
                     }
                 });
             },
-            (enabled, key.clone()),
+            (enabled, query_key.clone()),
+        )
+    };
+
+    let remove = {
+        let query_value = query_value.clone();
+        let query_state = query_state.clone();
+        let query_fetching = query_fetching.clone();
+        let client = client.clone();
+        let query_key = query_key.clone();
+
+        // FIXME: We could require to prevent set the data of the ongoing query, if any
+
+        use_callback(
+            move |(), (key,)| {
+                let mut client = client.clone();
+                client.remove_query_data(key);
+                query_state.set(QueryState::Idle);
+                query_value.set(None);
+                query_fetching.set(false);
+            },
+            (query_key.clone(),),
         )
     };
 
@@ -330,11 +356,14 @@ where
         });
     }
 
+    //
+
     UseQueryHandle {
-        key,
-        fetch: do_fetch.clone(),
-        state: query_state.clone(),
-        value: query_value.clone(),
+        key: query_key,
+        remove,
+        fetch: do_fetch,
+        state: query_state,
+        value: query_value,
         is_fetching: *query_fetching,
     }
 }
