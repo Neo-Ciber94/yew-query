@@ -1,4 +1,4 @@
-use std::{cell::RefCell, marker::PhantomData, rc::Rc};
+use std::{marker::PhantomData, rc::Rc};
 
 use futures::Future;
 use wasm_bindgen_futures::spawn_local;
@@ -6,6 +6,7 @@ use yew::virtual_dom::Key;
 
 use crate::{client::QueryClient, Error};
 
+/// Represents the state of a query.
 pub enum QueryState {
     Idle,
     Loading,
@@ -13,12 +14,19 @@ pub enum QueryState {
     Failed(Error),
 }
 
+/// An event emitted when executing a query.
 pub struct QueryEvent<T> {
+    /// The state of a query.
     pub state: QueryState,
+
+    /// Whether if is fetching the data.
     pub is_fetching: bool,
+
+    /// The last value emitted.
     pub value: Option<Rc<T>>,
 }
 
+/// A mechanism for track the state of a query.
 pub struct QueryObserver<T> {
     client: QueryClient,
     key: Key,
@@ -29,6 +37,7 @@ impl<T> QueryObserver<T>
 where
     T: 'static,
 {
+    /// Constructs a new observer for the given key.
     pub fn new(client: QueryClient, key: Key) -> Self {
         QueryObserver {
             client,
@@ -37,12 +46,14 @@ where
         }
     }
 
+    /// Returns the last value emitted.
     pub fn get_last_value(&self) -> Option<Rc<T>> {
         let key = &self.key;
         let value = self.client.get_query_data(key);
         value.ok()
     }
 
+    /// Adds a callback for observing the given query.
     pub fn observe<F, Fut, E, C>(&self, fetch: F, callback: C)
     where
         F: Fn() -> Fut + 'static,
@@ -52,7 +63,7 @@ where
     {
         let key = &self.key;
         let last_value = self.get_last_value();
-        let is_cached = self.client.contains_key(key);
+        let is_cached = self.client.contains_query(key);
 
         // If the value is cached and still fresh return
         if is_cached && !self.client.is_stale(key) {

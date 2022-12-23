@@ -10,6 +10,7 @@ pub struct TypeMismatchError(&'static str);
 #[derive(Debug)]
 pub struct KeyNotFoundError(String);
 
+/// An error ocurred in a query.
 #[derive(Debug)]
 pub enum QueryError {
     TypeMismatch(TypeMismatchError),

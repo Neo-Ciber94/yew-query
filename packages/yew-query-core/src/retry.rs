@@ -1,11 +1,14 @@
 use std::{time::Duration, rc::Rc};
 
+/// Represents an iterator over a duration.
 pub type Retry = Box<dyn Iterator<Item = Duration>>;
 
+/// Boxes a retry iterator.
 #[derive(Clone)]
 pub struct Retryer(Rc<dyn Fn() -> Retry>);
 
 impl Retryer {
+    /// Constructs a new `Retryer`.
     pub fn new<F, I>(f: F) -> Self
     where
         F: Fn() -> I + 'static,
@@ -19,6 +22,7 @@ impl Retryer {
         Retryer(f)
     }
 
+    /// Returns a `Retry` iterator.
     pub fn get(&self) -> Retry {
         (self.0)()
     }

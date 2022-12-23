@@ -2,7 +2,10 @@ use super::Error;
 use futures::{Future, TryFutureExt};
 use std::pin::Pin;
 
+/// Represents a future that resolves to a `Result<T, E>`.
 pub type TryBoxFuture<T, E = Error> = Pin<Box<dyn Future<Output = Result<T, E>>>>;
+
+/// Boxes a `Fetcher`.
 pub struct BoxFetcher<T>(Box<dyn Fn() -> TryBoxFuture<T>>);
 
 impl<T> BoxFetcher<T> {
@@ -52,8 +55,12 @@ impl<T> InfiniteFetcher<T> {
     }
 }
 
+/// Represents a function to get data.
 pub trait Fetch<T> {
+    /// The future returning the data.
     type Fut: Future<Output = Result<T, Error>>;
+
+    /// Returns a future that resolves to the data.
     fn get(&self) -> Self::Fut;
 }
 

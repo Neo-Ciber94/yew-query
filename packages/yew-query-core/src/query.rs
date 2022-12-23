@@ -7,6 +7,7 @@ use std::{
     time::Duration,
 };
 
+/// Represents a query.
 pub struct Query {
     pub(crate) fetcher: BoxFetcher<Rc<dyn Any>>,
     pub(crate) value: Rc<dyn Any>,
@@ -15,6 +16,7 @@ pub struct Query {
 }
 
 impl Query {
+    /// Returns `true` if the value of the query is expired.
     pub fn is_stale(&self) -> bool {
         match self.cache_time {
             Some(cache_time) => {
@@ -23,14 +25,6 @@ impl Query {
             }
             None => false,
         }
-    }
-
-    pub fn get(&self) -> Option<&Rc<dyn Any>> {
-        if self.is_stale() {
-            return None;
-        }
-
-        Some(&self.value)
     }
 
     pub(crate) fn set_value<T: 'static>(&mut self, value: T) -> Result<(), QueryError> {

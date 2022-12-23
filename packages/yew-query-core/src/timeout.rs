@@ -3,6 +3,8 @@ use wasm_bindgen::prelude::Closure;
 use wasm_bindgen::JsCast;
 use web_sys::window;
 
+// TODO: Remove?
+
 pub struct Timeout(i32);
 
 impl Timeout {
