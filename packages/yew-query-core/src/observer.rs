@@ -1,9 +1,9 @@
-use std::{marker::PhantomData, rc::Rc};
 use futures::Future;
+use std::{marker::PhantomData, rc::Rc};
 use wasm_bindgen_futures::spawn_local;
 use yew::virtual_dom::Key;
 
-use crate::{client::QueryClient, Error, key::QueryKey};
+use crate::{client::QueryClient, key::QueryKey, Error};
 
 /// Represents the state of a query.
 pub enum QueryState {
@@ -92,6 +92,11 @@ where
                 is_fetching: true,
                 value: None,
             });
+        }
+
+        // FIXME: If is fetching we should subscribe to the fetch instead of returning
+        if self.client.is_fetching(key) {
+            return;
         }
 
         let key = key.clone();

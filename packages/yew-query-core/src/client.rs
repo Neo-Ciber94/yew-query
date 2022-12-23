@@ -5,13 +5,20 @@ use crate::{fetcher::Fetch, key::QueryKey};
 use futures::TryFutureExt;
 use instant::Instant;
 use std::{
-    any::Any, cell::RefCell, collections::HashMap, fmt::Debug, future::Future, rc::Rc,
+    any::Any,
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    future::Future,
+    rc::Rc,
     time::Duration,
 };
+
 /// Mechanism used for fetching and caching queries.
 #[derive(Clone)]
 pub struct QueryClient {
     cache: Rc<RefCell<dyn QueryCache>>,
+    fetching: Rc<RefCell<HashSet<QueryKey>>>,
     stale_time: Option<Duration>,
     retry: Option<Retryer>,
 }
@@ -30,6 +37,12 @@ impl QueryClient {
         } else {
             false
         }
+    }
+
+    /// Returns `true` if is fetching the given key.
+    pub fn is_fetching(&self, key: &QueryKey) -> bool {
+        let fetching = self.fetching.borrow();
+        fetching.contains(key)
     }
 
     /// Executes the future, cache and returns the result.
@@ -51,12 +64,17 @@ impl QueryClient {
         let retrier = self.retry.as_ref();
 
         if self.stale_time.is_none() {
+            self.update_fetching_status(&key, true);
             let ret = fetch_with_retry(&f, retrier).await;
+            self.update_fetching_status(&key, false);
             return ret.map(|x| Rc::new(x));
         }
 
+        self.update_fetching_status(&key, true);
         let fetcher = BoxFetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
         let value = fetch_with_retry(&fetcher, retrier).await?;
+        self.update_fetching_status(&key, false);
+
         let updated_at = Instant::now();
 
         let mut cache = self.cache.borrow_mut();
@@ -169,6 +187,15 @@ impl QueryClient {
         let mut cache = self.cache.borrow_mut();
         cache.clear();
     }
+
+    fn update_fetching_status(&self, key: &QueryKey, fetching: bool) {
+        let mut currently_fetching = self.fetching.borrow_mut();
+        if fetching {
+            currently_fetching.insert(key.clone());
+        } else {
+            currently_fetching.remove(key);
+        }
+    }
 }
 
 impl PartialEq for QueryClient {
@@ -184,6 +211,25 @@ impl Debug for QueryClient {
             .field("stale_time", &self.stale_time)
             .field("retry", &"Retryer")
             .finish()
+    }
+}
+
+struct IsFetching<'a> {
+    client: &'a QueryClient,
+    key: &'a QueryKey,
+}
+
+impl<'a> IsFetching<'a> {
+    pub fn begin(client: &'a QueryClient, key: &'a QueryKey) -> Self {
+        client.update_fetching_status(key, true);
+        IsFetching { client, key }
+    }
+}
+
+impl Drop for IsFetching<'_> {
+    fn drop(&mut self) {
+        let key = self.key;
+        self.client.update_fetching_status(key, false);
     }
 }
 
@@ -242,6 +288,7 @@ impl QueryClientBuilder {
             cache,
             stale_time,
             retry,
+            fetching: Default::default(),
         }
     }
 }
