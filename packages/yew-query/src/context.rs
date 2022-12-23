@@ -1,4 +1,3 @@
-use std::{cell::RefCell, rc::Rc};
 use yew::{function_component, Children, ContextProvider, Properties};
 use yew_query_core::client::QueryClient;
 
@@ -15,12 +14,6 @@ impl Clone for QueryClientContext {
     }
 }
 
-// impl PartialEq for QueryClientContext {
-//     fn eq(&self, other: &Self) -> bool {
-//         Rc::ptr_eq(&self.client, &other.client)
-//     }
-// }
-
 #[derive(Properties, PartialEq)]
 pub struct QueryClientContextProps {
     pub client: QueryClient,
@@ -29,11 +22,6 @@ pub struct QueryClientContextProps {
     pub children: Children,
 }
 
-// impl PartialEq for QueryClientContextProps {
-//     fn eq(&self, other: &Self) -> bool {
-//         Rc::ptr_eq(&self.client, &other.client) && self.children == other.children
-//     }
-// }
 
 #[function_component]
 pub fn QueryClientProvider(props: &QueryClientContextProps) -> yew::Html {

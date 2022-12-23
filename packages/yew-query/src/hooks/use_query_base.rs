@@ -4,11 +4,10 @@ use crate::common::{
 };
 use futures::Future;
 use std::rc::Rc;
-use std::sync::Mutex;
 use web_sys::AbortSignal;
 use yew::virtual_dom::Key;
 use yew::{
-    hook, use_callback, use_effect, use_effect_with_deps, use_mut_ref, use_state, Callback,
+    hook, use_callback, use_effect_with_deps, use_state, Callback,
     UseStateHandle,
 };
 use yew_query_core::observer::QueryEvent;

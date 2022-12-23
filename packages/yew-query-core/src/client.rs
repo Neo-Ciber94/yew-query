@@ -1,15 +1,13 @@
 use super::{
     cache::QueryCache, error::QueryError, fetcher::BoxFetcher, query::Query, retry::Retryer, Error,
 };
-use crate::fetcher::Fetch;
+use crate::{fetcher::Fetch, key::QueryKey};
 use futures::TryFutureExt;
 use instant::Instant;
 use std::{
     any::Any, cell::RefCell, collections::HashMap, fmt::Debug, future::Future, rc::Rc,
     time::Duration,
 };
-use yew::virtual_dom::Key;
-
 /// Mechanism used for fetching and caching queries.
 #[derive(Clone)]
 pub struct QueryClient {
@@ -25,9 +23,9 @@ impl QueryClient {
     }
 
     /// Returns `true` if the value for the given key not expired.
-    pub fn is_stale(&self, key: &Key) -> bool {
+    pub fn is_stale(&self, key: &QueryKey) -> bool {
         let cache = self.cache.borrow();
-        if let Some(query) = cache.get(key) {
+        if let Some(query) = cache.get(&key) {
             query.is_stale()
         } else {
             false
@@ -35,7 +33,7 @@ impl QueryClient {
     }
 
     /// Executes the future, cache and returns the result.
-    pub async fn fetch_query<F, Fut, T, E>(&mut self, key: Key, f: F) -> Result<Rc<T>, Error>
+    pub async fn fetch_query<F, Fut, T, E>(&mut self, key: QueryKey, f: F) -> Result<Rc<T>, Error>
     where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
@@ -83,7 +81,7 @@ impl QueryClient {
     }
 
     /// Executes the query with the given key, then cache and return the result.
-    pub async fn refetch_query<T: 'static>(&mut self, key: Key) -> Result<Rc<T>, Error> {
+    pub async fn refetch_query<T: 'static>(&mut self, key: QueryKey) -> Result<Rc<T>, Error> {
         let mut cache = self.cache.borrow_mut();
         let query = cache.get_mut(&key);
 
@@ -114,16 +112,20 @@ impl QueryClient {
     }
 
     /// Returns `true` if the given key exists in the cache.
-    pub fn contains_query(&self, key: &Key) -> bool {
+    pub fn contains_query(&self, key: &QueryKey) -> bool {
         let cache = self.cache.borrow();
         return cache.has(key);
     }
 
     /// Returns the query value associated with the given key.
-    /// 
+    ///
     /// # Remarks
     /// This don't checks if the value is not stale.
-    pub fn get_query_data<T: 'static>(&self, key: &Key) -> Result<Rc<T>, QueryError> {
+    pub fn get_query_data<T: 'static>(&self, key: &QueryKey) -> Result<Rc<T>, QueryError> {
+        if !key.is_type::<T>() {
+            return Err(QueryError::type_mismatch::<T>());
+        }
+
         let cache = self.cache.borrow();
         cache
             .get(key)
@@ -138,7 +140,15 @@ impl QueryClient {
     }
 
     /// Sets cache value for given key.
-    pub fn set_query_data<T: 'static>(&mut self, key: Key, value: T) -> Result<(), QueryError> {
+    pub fn set_query_data<T: 'static>(
+        &mut self,
+        key: QueryKey,
+        value: T,
+    ) -> Result<(), QueryError> {
+        if !key.is_type::<T>() {
+            return Err(QueryError::type_mismatch::<T>());
+        }
+
         let mut cache = self.cache.borrow_mut();
         if let Some(query) = cache.get_mut(&key) {
             let ret = query.set_value(value);
@@ -149,7 +159,7 @@ impl QueryClient {
     }
 
     /// Removes the query with the given key from the cache.
-    pub fn remove_query_data(&mut self, key: &Key) {
+    pub fn remove_query_data(&mut self, key: &QueryKey) {
         let mut cache = self.cache.borrow_mut();
         cache.remove(key);
     }

@@ -1,10 +1,9 @@
 use std::{marker::PhantomData, rc::Rc};
-
 use futures::Future;
 use wasm_bindgen_futures::spawn_local;
 use yew::virtual_dom::Key;
 
-use crate::{client::QueryClient, Error};
+use crate::{client::QueryClient, Error, key::QueryKey};
 
 /// Represents the state of a query.
 pub enum QueryState {
@@ -29,7 +28,7 @@ pub struct QueryEvent<T> {
 /// A mechanism for track the state of a query.
 pub struct QueryObserver<T> {
     client: QueryClient,
-    key: Key,
+    key: QueryKey,
     _marker: PhantomData<T>,
 }
 
@@ -39,6 +38,8 @@ where
 {
     /// Constructs a new observer for the given key.
     pub fn new(client: QueryClient, key: Key) -> Self {
+        let key = QueryKey::of::<T>(key);
+
         QueryObserver {
             client,
             key,

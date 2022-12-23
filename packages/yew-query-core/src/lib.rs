@@ -5,6 +5,7 @@ pub mod fetcher;
 pub mod query;
 pub mod retry;
 pub mod observer;
+pub mod key;
 
 pub type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 

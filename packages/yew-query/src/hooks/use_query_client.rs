@@ -1,6 +1,5 @@
 use crate::context::QueryClientContext;
-use std::{cell::RefCell, rc::Rc};
-use yew::{use_context, hook};
+use yew::{hook, use_context};
 use yew_query_core::client::QueryClient;
 
 #[hook]

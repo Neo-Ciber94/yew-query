@@ -1,6 +1,5 @@
+use crate::key::QueryKey;
 use std::fmt::Display;
-
-use yew::virtual_dom::Key;
 
 #[doc(hidden)]
 #[derive(Debug)]
@@ -24,7 +23,7 @@ impl QueryError {
         QueryError::TypeMismatch(TypeMismatchError(ty))
     }
 
-    pub(crate) fn key_not_found(key: &Key) -> Self {
+    pub(crate) fn key_not_found(key: &QueryKey) -> Self {
         let k = key.to_string();
         QueryError::KeyNotFound(KeyNotFoundError(k))
     }
@@ -39,7 +38,7 @@ impl Display for QueryError {
         match self {
             TypeMismatch(TypeMismatchError(s)) => write!(f, "invalid type `{s}`"),
             KeyNotFound(KeyNotFoundError(k)) => write!(f, "key not found `{k}`"),
-            NoCacheValue => write!(f, "no value in cache")
+            NoCacheValue => write!(f, "no value in cache"),
         }
     }
 }
