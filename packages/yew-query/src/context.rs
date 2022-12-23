@@ -1,6 +1,7 @@
 use yew::{function_component, Children, ContextProvider, Properties};
 use yew_query_core::client::QueryClient;
 
+/// A context with the `QueryClient`.
 #[derive(PartialEq)]
 pub struct QueryClientContext {
     pub(crate) client: QueryClient,
@@ -14,6 +15,7 @@ impl Clone for QueryClientContext {
     }
 }
 
+/// Properties for a `QueryClientContext`.
 #[derive(Properties, PartialEq)]
 pub struct QueryClientContextProps {
     pub client: QueryClient,
@@ -22,7 +24,7 @@ pub struct QueryClientContextProps {
     pub children: Children,
 }
 
-
+/// Declares a `QueryClient` for the app.
 #[function_component]
 pub fn QueryClientProvider(props: &QueryClientContextProps) -> yew::Html {
     let context = QueryClientContext {
