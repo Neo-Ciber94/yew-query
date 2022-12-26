@@ -1,4 +1,5 @@
 use super::{error::QueryError, fetcher::BoxFetcher};
+use futures::future::{Shared, BoxFuture};
 use instant::Instant;
 use std::{
     any::{Any, TypeId},
@@ -7,12 +8,15 @@ use std::{
     time::Duration,
 };
 
+pub type SharedBoxFuture<T> = Shared<BoxFuture<'static, T>>;
+
 /// Represents a query.
 pub struct Query {
     pub(crate) fetcher: BoxFetcher<Rc<dyn Any>>,
     pub(crate) value: Rc<dyn Any>,
     pub(crate) updated_at: Instant,
     pub(crate) cache_time: Option<Duration>,
+    //pub(crate) future_or_value: SharedBoxFuture<Rc<dyn Any>>,
 }
 
 impl Query {
@@ -42,7 +46,7 @@ impl Debug for Query {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Query")
             .field("fetcher", &"Fetcher<_>")
-            .field("cache_value", &"Rc<_>")
+            .field("value", &"Rc<_>")
             .field("updated_at", &self.updated_at)
             .field("cache_time", &self.cache_time)
             .finish()

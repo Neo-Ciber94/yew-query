@@ -18,3 +18,4 @@ web-sys = { version = "0.3.60", features = [
 ] }
 instant = { version = "0.1", features = ["wasm-bindgen", "inaccurate"] }
 log = "0.4.17"
+pin-project-lite = "0.2"

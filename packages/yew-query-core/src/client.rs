@@ -63,31 +63,28 @@ impl QueryClient {
 
         let retrier = self.retry.as_ref();
 
-        if self.stale_time.is_none() {
-            self.update_fetching_status(&key, true);
-            let ret = fetch_with_retry(&f, retrier).await;
-            self.update_fetching_status(&key, false);
-            return ret.map(|x| Rc::new(x));
-        }
-
         self.update_fetching_status(&key, true);
         let fetcher = BoxFetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
-        let value = fetch_with_retry(&fetcher, retrier).await?;
+        let fut = fetch_with_retry(&fetcher, retrier);
+        let value = fut.await?;
         self.update_fetching_status(&key, false);
-
-        let updated_at = Instant::now();
 
         let mut cache = self.cache.borrow_mut();
 
-        cache.set(
-            key.clone(),
-            Query {
-                value,
-                updated_at,
-                fetcher,
-                cache_time: self.stale_time.clone(),
-            },
-        );
+        // Only store the result in the cache if had stale time
+        if self.stale_time.is_some() {
+            let updated_at = Instant::now();
+
+            cache.set(
+                key.clone(),
+                Query {
+                    value,
+                    updated_at,
+                    fetcher,
+                    cache_time: self.stale_time.clone(),
+                },
+            );
+        }
 
         let ret = cache
             .get(&key)
@@ -214,25 +211,6 @@ impl Debug for QueryClient {
     }
 }
 
-struct IsFetching<'a> {
-    client: &'a QueryClient,
-    key: &'a QueryKey,
-}
-
-impl<'a> IsFetching<'a> {
-    pub fn begin(client: &'a QueryClient, key: &'a QueryKey) -> Self {
-        client.update_fetching_status(key, true);
-        IsFetching { client, key }
-    }
-}
-
-impl Drop for IsFetching<'_> {
-    fn drop(&mut self) {
-        let key = self.key;
-        self.client.update_fetching_status(key, false);
-    }
-}
-
 /// A builder for creating a `QueryClient`.
 #[derive(Default)]
 pub struct QueryClientBuilder {
@@ -290,6 +268,22 @@ impl QueryClientBuilder {
             retry,
             fetching: Default::default(),
         }
+    }
+}
+
+pub struct FetchResult<T> {
+    value: Rc<RefCell<Option<Result<T, Error>>>>,
+}
+
+impl<T> FetchResult<T> {
+    pub fn new(value: Result<T, Error>) -> Self {
+        let value = Rc::new(RefCell::new(Some(value)));
+        FetchResult { value }
+    }
+
+    pub fn take(&self) -> Option<Result<T, Error>> {
+        let mut value = self.value.borrow_mut();
+        value.take()
     }
 }
 
