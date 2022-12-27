@@ -1,7 +1,9 @@
+use self::x::CacheFuture;
+
 use super::{error::QueryError, fetcher::BoxFetcher};
-use crate::Error;
+use crate::{query::x::CacheFutureExt, Error};
 use futures::{
-    future::{ready, LocalBoxFuture, Shared},
+    future::{ready, LocalBoxFuture},
     FutureExt,
 };
 use instant::Instant;
@@ -12,7 +14,7 @@ use std::{
     time::Duration,
 };
 
-pub type QueryCacheFuture = Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>;
+pub type QueryCacheFuture = CacheFuture<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>;
 
 /// Represents a query.
 pub struct Query {
@@ -58,9 +60,9 @@ impl Query {
     /// - `Some(Err(..))` if the query resolved with an error.
     /// - `None` if the query had not resolved yet.
     pub fn value(&self) -> Option<Rc<dyn Any>> {
-        match self.future_or_value.peek() {
+        match self.future_or_value.last_value() {
             Some(x) => {
-                let value = x.clone().expect("the query returned an error");
+                let value = x.expect("the query returned an error");
                 Some(value)
             }
             _ => None,
@@ -80,7 +82,7 @@ impl Query {
 
     /// Returns `true` if the future of this query had resolved.
     pub fn is_resolved(&self) -> bool {
-        self.future_or_value.peek().is_some()
+        self.future_or_value.is_resolved()
     }
 
     /// Returns `true` if the value of the query is expired.
@@ -107,10 +109,10 @@ impl Query {
 
         let fut = ready(Ok(Rc::new(value) as Rc<dyn Any>))
             .boxed_local()
-            .shared();
+            .cached();
         let _ = futures::executor::block_on(fut.clone());
 
-        debug_assert!(fut.peek().is_some());
+        debug_assert!(fut.last_value().is_some());
 
         self.future_or_value = fut;
         self.updated_at = Instant::now();
@@ -143,6 +145,14 @@ pub(crate) mod x {
         {
             CacheFuture::new(self)
         }
+
+        fn cached_with_initial(self, initial_value: Option<Self::Output>) -> CacheFuture<Self>
+        where
+            Self: Sized,
+            Self::Output: Clone,
+        {
+            CacheFuture::with_initial(self, initial_value)
+        }
     }
 
     impl<F> CacheFutureExt for F where F: Future {}
@@ -165,9 +175,13 @@ pub(crate) mod x {
         Fut::Output: Clone,
     {
         pub fn new(fut: Fut) -> Self {
+            Self::with_initial(fut, None)
+        }
+
+        pub fn with_initial(fut: Fut, initial_value: Option<Fut::Output>) -> Self {
             CacheFuture {
                 future_or_output: fut.shared(),
-                last_value: Rc::new(RefCell::new(None)),
+                last_value: Rc::new(RefCell::new(initial_value)),
             }
         }
 
