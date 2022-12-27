@@ -1,5 +1,59 @@
 use crate::key::QueryKey;
 use std::fmt::Display;
+use std::sync::Arc;
+
+#[derive(Clone)]
+pub struct Error(Arc<dyn StdError + Send + Sync + 'static>);
+
+impl Error {
+    pub fn new<E>(error: E) -> Self
+    where
+        E: StdError + Send + Sync + 'static,
+    {
+        Error(Arc::new(error))
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl std::fmt::Debug for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+pub trait StdError: std::fmt::Debug + std::fmt::Display {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        None
+    }
+}
+
+impl<E> StdError for E where E: std::fmt::Debug + std::fmt::Display {}
+
+impl From<Error> for Box<dyn StdError + Send + Sync + 'static> {
+    #[cold]
+    fn from(error: Error) -> Self {
+        Box::new(error)
+    }
+}
+
+impl From<Error> for Box<dyn StdError + Send + 'static> {
+    fn from(error: Error) -> Self {
+        Box::<dyn StdError + Send + Sync>::from(error)
+    }
+}
+
+impl From<Error> for Box<dyn StdError + 'static> {
+    fn from(error: Error) -> Self {
+        Box::<dyn StdError + Send + Sync>::from(error)
+    }
+}
 
 #[doc(hidden)]
 #[derive(Debug)]

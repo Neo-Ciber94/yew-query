@@ -101,7 +101,7 @@ impl QueryClient {
         let query = cache.get_mut(&key);
 
         let Some(query) = query else {
-            return Err(QueryError::key_not_found(&key).into());
+            return Err(Error::new(QueryError::key_not_found(&key)));
         };
 
         // FIXME: We still have the cache borrowed while still refetching
@@ -268,22 +268,6 @@ impl QueryClientBuilder {
             retry,
             fetching: Default::default(),
         }
-    }
-}
-
-pub struct FetchResult<T> {
-    value: Rc<RefCell<Option<Result<T, Error>>>>,
-}
-
-impl<T> FetchResult<T> {
-    pub fn new(value: Result<T, Error>) -> Self {
-        let value = Rc::new(RefCell::new(Some(value)));
-        FetchResult { value }
-    }
-
-    pub fn take(&self) -> Option<Result<T, Error>> {
-        let mut value = self.value.borrow_mut();
-        value.take()
     }
 }
 
