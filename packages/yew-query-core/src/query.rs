@@ -1,7 +1,5 @@
-use self::x::CacheFuture;
-
 use super::{error::QueryError, fetcher::BoxFetcher};
-use crate::{query::x::CacheFutureExt, Error};
+use crate::{futures::cache::{Cached, CacheFutureExt}, Error};
 use futures::{
     future::{ready, LocalBoxFuture},
     FutureExt,
@@ -14,7 +12,7 @@ use std::{
     time::Duration,
 };
 
-pub type QueryCacheFuture = CacheFuture<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>;
+pub(crate) type QueryCacheFuture = Cached<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>;
 
 /// Represents a query.
 pub struct Query {
@@ -132,102 +130,4 @@ impl Debug for Query {
     }
 }
 
-pub(crate) mod x {
-    use futures::{future::Shared, Future, FutureExt};
-    use pin_project_lite::pin_project;
-    use std::{cell::RefCell, rc::Rc};
-
-    pub trait CacheFutureExt: Future {
-        fn cached(self) -> CacheFuture<Self>
-        where
-            Self: Sized,
-            Self::Output: Clone,
-        {
-            CacheFuture::new(self)
-        }
-
-        fn cached_with_initial(self, initial_value: Option<Self::Output>) -> CacheFuture<Self>
-        where
-            Self: Sized,
-            Self::Output: Clone,
-        {
-            CacheFuture::with_initial(self, initial_value)
-        }
-    }
-
-    impl<F> CacheFutureExt for F where F: Future {}
-
-    pin_project! {
-        pub struct CacheFuture<Fut>
-        where
-            Fut: Future,
-        {
-            last_value: Rc<RefCell<Option<Fut::Output>>>,
-
-            #[pin]
-            future_or_output: Shared<Fut>,
-        }
-    }
-
-    impl<Fut> CacheFuture<Fut>
-    where
-        Fut: Future,
-        Fut::Output: Clone,
-    {
-        pub fn new(fut: Fut) -> Self {
-            Self::with_initial(fut, None)
-        }
-
-        pub fn with_initial(fut: Fut, initial_value: Option<Fut::Output>) -> Self {
-            CacheFuture {
-                future_or_output: fut.shared(),
-                last_value: Rc::new(RefCell::new(initial_value)),
-            }
-        }
-
-        pub fn last_value(&self) -> Option<Fut::Output> {
-            match self.last_value.borrow().as_ref() {
-                Some(x) => Some(x.clone()),
-                None => None,
-            }
-        }
-
-        pub fn is_resolved(&self) -> bool {
-            self.future_or_output.peek().is_some()
-        }
-    }
-
-    impl<Fut> Clone for CacheFuture<Fut>
-    where
-        Fut: Future,
-    {
-        fn clone(&self) -> Self {
-            Self {
-                last_value: self.last_value.clone(),
-                future_or_output: self.future_or_output.clone(),
-            }
-        }
-    }
-
-    impl<Fut> Future for CacheFuture<Fut>
-    where
-        Fut: Future,
-        Fut::Output: Clone,
-    {
-        type Output = Fut::Output;
-
-        fn poll(
-            self: std::pin::Pin<&mut Self>,
-            cx: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Self::Output> {
-            let this = self.project();
-            match this.future_or_output.poll(cx) {
-                std::task::Poll::Ready(x) => {
-                    *this.last_value.borrow_mut() = Some(x.clone());
-                    std::task::Poll::Ready(x)
-                }
-                std::task::Poll::Pending => std::task::Poll::Pending,
-            }
-        }
-    }
-}
+pub(crate) mod x {}

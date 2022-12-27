@@ -1,7 +1,7 @@
 use super::{
     cache::QueryCache, error::QueryError, fetcher::BoxFetcher, query::Query, retry::Retryer, Error,
 };
-use crate::{fetcher::Fetch, key::QueryKey, query::x::CacheFutureExt};
+use crate::{fetcher::Fetch, futures::cache::CacheFutureExt, key::QueryKey};
 use futures::{FutureExt, TryFutureExt};
 use std::{
     any::{Any, TypeId},
