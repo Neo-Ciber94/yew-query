@@ -65,15 +65,15 @@ where
         let key = &self.key;
         let last_value = self.get_last_value();
         let is_cached = self.client.contains_query(key);
+        let is_fetching = self.client.is_fetching(key);
 
         // If the value is cached and still fresh return
         if is_cached && !self.client.is_stale(key) && last_value.is_some() {
             log::trace!("{key} is cached");
-            debug_assert!(last_value.is_some());
 
             callback(QueryEvent {
                 state: QueryState::Ready,
-                is_fetching: false,
+                is_fetching,
                 value: last_value,
             });
             return;
@@ -96,7 +96,7 @@ where
 
         let key = key.clone();
         let client = self.client.clone();
-
+        
         spawn_local(async move {
             let mut client = client;
             let ret = client.fetch_query(key, fetch).await;

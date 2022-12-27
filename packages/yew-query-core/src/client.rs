@@ -62,7 +62,13 @@ impl QueryClient {
             if let Some(query) = cache.get(&key) {
                 if !query.is_resolved() {
                     log::trace!("returning resolving query...");
-                    return query.resolve().await;
+                    //return query.resolve().await;
+                    let fut = query.future_or_value.clone();
+                    drop(cache);
+                    
+                    let value = fut.await?;
+                    let ret = value.downcast::<T>().unwrap();
+                    return Ok(ret);
                 }
 
                 if !query.is_stale() && query.is_resolved() {
