@@ -1,12 +1,12 @@
 use super::Error;
 use futures::{Future, TryFutureExt};
-use std::pin::Pin;
+use std::{pin::Pin, rc::Rc};
 
 /// Represents a future that resolves to a `Result<T, E>`.
 pub type TryBoxFuture<T, E = Error> = Pin<Box<dyn Future<Output = Result<T, E>>>>;
 
 /// Boxes a `Fetcher`.
-pub struct BoxFetcher<T>(Box<dyn Fn() -> TryBoxFuture<T>>);
+pub struct BoxFetcher<T>(Rc<dyn Fn() -> TryBoxFuture<T>>);
 
 impl<T> BoxFetcher<T> {
     pub fn new<F, Fut, E>(fetcher: F) -> Self
@@ -15,7 +15,7 @@ impl<T> BoxFetcher<T> {
         Fut: Future<Output = Result<T, E>> + 'static,
         E: Into<Error> + 'static,
     {
-        let f = Box::new(move || {
+        let f = Rc::new(move || {
             let fut = fetcher();
             Box::pin(async move {
                 match fut.await {
@@ -28,6 +28,13 @@ impl<T> BoxFetcher<T> {
         BoxFetcher(f)
     }
 }
+
+impl<T> Clone for BoxFetcher<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
 pub struct InfiniteFetcher<T>(Box<dyn Fn(usize) -> TryBoxFuture<T>>);
 
 impl<T> InfiniteFetcher<T> {
