@@ -67,7 +67,7 @@ where
         let is_cached = self.client.contains_query(key);
 
         // If the value is cached and still fresh return
-        if is_cached && !self.client.is_stale(key) {
+        if is_cached && !self.client.is_stale(key) && last_value.is_some() {
             log::trace!("{key} is cached");
             debug_assert!(last_value.is_some());
 
@@ -92,11 +92,6 @@ where
                 is_fetching: true,
                 value: None,
             });
-        }
-
-        // FIXME: If is fetching we should subscribe to the fetch instead of returning
-        if self.client.is_fetching(key) {
-            return;
         }
 
         let key = key.clone();

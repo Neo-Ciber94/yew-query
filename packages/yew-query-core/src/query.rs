@@ -80,7 +80,7 @@ impl Query {
 
     /// Returns `true` if the future of this query had resolved.
     pub fn is_resolved(&self) -> bool {
-        self.future_or_value.peek().is_none()
+        self.future_or_value.peek().is_some()
     }
 
     /// Returns `true` if the value of the query is expired.
@@ -124,6 +124,8 @@ impl Debug for Query {
             .field("future_or_value", &"Shared<_>")
             .field("updated_at", &self.updated_at)
             .field("cache_time", &self.cache_time)
+            .field("type_id", &self.type_id)
+            .field("is_stale", &self.is_stale())
             .finish()
     }
 }

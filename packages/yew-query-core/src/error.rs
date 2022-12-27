@@ -2,6 +2,8 @@ use crate::key::QueryKey;
 use std::fmt::Display;
 use std::sync::Arc;
 
+use std::error::Error as StdError;
+
 #[derive(Clone)]
 pub struct Error(Arc<dyn StdError + Send + Sync + 'static>);
 
@@ -13,8 +15,6 @@ impl Error {
         Error(Arc::new(error))
     }
 }
-
-impl std::error::Error for Error {}
 
 impl std::fmt::Debug for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -28,30 +28,13 @@ impl std::fmt::Display for Error {
     }
 }
 
-pub trait StdError: std::fmt::Debug + std::fmt::Display {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        None
-    }
-}
-
-impl<E> StdError for E where E: std::fmt::Debug + std::fmt::Display {}
-
-impl From<Error> for Box<dyn StdError + Send + Sync + 'static> {
+impl<E> From<E> for Error
+where
+    E: StdError + Send + Sync + 'static,
+{
     #[cold]
-    fn from(error: Error) -> Self {
-        Box::new(error)
-    }
-}
-
-impl From<Error> for Box<dyn StdError + Send + 'static> {
-    fn from(error: Error) -> Self {
-        Box::<dyn StdError + Send + Sync>::from(error)
-    }
-}
-
-impl From<Error> for Box<dyn StdError + 'static> {
-    fn from(error: Error) -> Self {
-        Box::<dyn StdError + Send + Sync>::from(error)
+    fn from(error: E) -> Self {
+        Error::new(error)
     }
 }
 
@@ -68,6 +51,7 @@ pub struct KeyNotFoundError(String);
 pub enum QueryError {
     TypeMismatch(TypeMismatchError),
     KeyNotFound(KeyNotFoundError),
+    NotReady,
     NoCacheValue,
 }
 
@@ -92,6 +76,7 @@ impl Display for QueryError {
         match self {
             TypeMismatch(TypeMismatchError(s)) => write!(f, "invalid type `{s}`"),
             KeyNotFound(KeyNotFoundError(k)) => write!(f, "key not found `{k}`"),
+            NotReady => write!(f, "query had not resolved yet"),
             NoCacheValue => write!(f, "no value in cache"),
         }
     }
