@@ -95,7 +95,7 @@ fn main() {
 }
 
 async fn fetch_posts() -> reqwest::Result<Vec<Post>> {
-    sleep(Duration::from_secs(2)).await;
+    sleep(Duration::from_secs(5)).await;
     reqwest::get("https://jsonplaceholder.typicode.com/posts")
         .await?
         .json::<Vec<Post>>()

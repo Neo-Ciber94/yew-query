@@ -1,8 +1,5 @@
-use super::{
-    cache::QueryCache, error::QueryError, fetcher::BoxFetcher, query::Query, retry::Retryer, Error,
-};
-use crate::{fetcher::Fetch, futures::cache::CacheFutureExt, key::QueryKey};
-use futures::{FutureExt, TryFutureExt};
+use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retryer, Error};
+use crate::{fetcher::Fetch, key::QueryKey};
 use std::{
     any::{Any, TypeId},
     cell::RefCell,
@@ -40,7 +37,7 @@ impl QueryClient {
     /// Returns `true` if is fetching the given key.
     pub fn is_fetching(&self, key: &QueryKey) -> bool {
         match self.cache.borrow().get(key) {
-            Some(query) => !query.is_resolved(),
+            Some(query) => !query.is_fetching(),
             None => false,
         }
     }
@@ -53,102 +50,71 @@ impl QueryClient {
         T: 'static,
         E: Into<Error> + 'static,
     {
+        // If is fetching for the query still fresh in cache
         {
             let cache = self.cache.borrow();
-            if let Some(query) = cache.get(&key) {
-                if !query.is_resolved() {
-                    // FIXME: We should not access the `future_or_value` directly
-                    let fut = query.future_or_value.clone();
-                    drop(cache);
+            if let Some(query) = cache.get(&key).cloned() {
+                log::trace!(
+                    "cache hit: is fetching: {}, is stale: {}",
+                    query.is_fetching(),
+                    query.is_stale()
+                );
+                // This prevent borrow errors
+                drop(cache);
 
-                    if let Some(last_value) = fut.last_value() {
-                        let ret = last_value?.downcast::<T>().unwrap();
-                        return Ok(ret);
+                if query.is_fetching() || !query.is_stale() {
+                    if let Some(last_value) = query.last_value() {
+                        log::trace!("returning from cache");
+                        let ret = last_value
+                            .downcast::<T>()
+                            .map_err(|_| QueryError::type_mismatch::<T>().into());
+
+                        return ret;
                     }
 
-                    let value = fut.await?;
-                    let ret = value.downcast::<T>().unwrap();
-                    return Ok(ret);
-                }
-
-                if !query.is_stale() && query.is_resolved() {
-                    let value = query.value().expect("query had not resolved");
-                    let ret = value
-                        .downcast::<T>()
-                        .map_err(|_| QueryError::type_mismatch::<T>().into());
-                    return ret;
+                    // Fallback to the current query
+                    if let Some(ret) = query.future::<T>().await {
+                        log::trace!("returning future");
+                        return ret;
+                    }
                 }
             }
         }
 
-        // We store the future with the last emitted value.
-        let last_value = {
-            let cache = self.cache.borrow();
-            cache.get(&key).map(|x| x.value()).flatten().map(|x| Ok(x))
-        };
-
+        let can_cache = self.stale_time.is_some();
         let retrier = self.retry.clone();
-        let fetcher = BoxFetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
-        let fut = fetch_with_retry(fetcher.clone(), retrier)
-            .boxed_local()
-            .cached_with_initial(last_value);
 
         // Only store the result in the cache if had stale time
-        if self.stale_time.is_some() {
+        if !can_cache {
+            log::trace!("no cache");
+            let ret = fetch_with_retry(f, retrier).await?;
+            return Ok(Rc::new(ret));
+        }
+
+        let mut query = Query::new(f, self.stale_time.clone());
+        {
             let mut cache = self.cache.borrow_mut();
-            let cache_time = self.stale_time.clone();
-            let query = Query::new::<T>(fut.clone(), fetcher, cache_time);
-            cache.set(key.clone(), query);
+            cache.set(key.clone(), query.clone());
+            log::trace!("storing in cache");
         }
 
         // Await the value what will update the copy in the cache
-        let _ = fut.await?;
-        let cache = self.cache.borrow_mut();
-
-        debug_assert!(cache.get(&key).unwrap().is_resolved());
-
-        let ret = cache
-            .get(&key)
-            .map(|x| x.value().expect("query had not resolved"))
-            .map(|x| x.downcast::<T>().unwrap())
-            .unwrap(); // SAFETY: The value is `T`
-
-        Ok(ret)
+        let value = query.fetch::<T>(retrier).await?;
+        Ok(value)
     }
 
     /// Executes the query with the given key, then cache and return the result.
     pub async fn refetch_query<T: 'static>(&mut self, key: QueryKey) -> Result<Rc<T>, Error> {
-        let mut cache = self.cache.borrow_mut();
-        let query = cache.get_mut(&key);
+        let cache = self.cache.borrow_mut();
+        let query = cache.get(&key).cloned();
+        drop(cache);
 
-        let Some(query) = query else {
+        let Some(mut query) = query else {
             return Err(Error::new(QueryError::key_not_found(&key)));
         };
 
-        // FIXME: We still have the cache borrowed while still refetching
-        // this may lead to a borrow error if other thread attempt to read the cache
-
-        let last_value = { query.value().map(|x| Ok(x)) };
-
         let retrier = self.retry.clone();
-        let fetcher = query.fetcher().clone();
-        let fut = fetch_with_retry(fetcher, retrier)
-            .boxed_local()
-            .cached_with_initial(last_value);
-
-        // Update the future
-        query.set_future(fut);
-        let _ = query.resolve::<T>().await;
-
-        let cache = self.cache.borrow();
-
-        let ret = cache
-            .get(&key)
-            .map(|x| x.value().unwrap())
-            .unwrap() // SAFETY: value was added to cache
-            .downcast::<T>()
-            .unwrap();
-
+        let ret = query.fetch(retrier).await?;
         Ok(ret)
     }
 
@@ -173,7 +139,7 @@ impl QueryClient {
             .ok_or(QueryError::NoCacheValue)
             .and_then(|query| {
                 query
-                    .value()
+                    .last_value()
                     .clone()
                     .ok_or_else(|| QueryError::NotReady)
                     .map(|x| x.downcast::<T>().unwrap())
