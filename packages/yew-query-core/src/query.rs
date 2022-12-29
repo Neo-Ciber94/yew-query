@@ -1,5 +1,8 @@
 use super::{error::QueryError, fetcher::BoxFetcher};
-use crate::{futures::cache::{Cached, CacheFutureExt}, Error};
+use crate::{
+    futures::cache::{CacheFutureExt, Cached},
+    Error,
+};
 use futures::{
     future::{ready, LocalBoxFuture},
     FutureExt,
@@ -16,10 +19,10 @@ pub(crate) type QueryCacheFuture = Cached<LocalBoxFuture<'static, Result<Rc<dyn 
 
 /// Represents a query.
 pub struct Query {
+    pub(crate) future_or_value: QueryCacheFuture,
     fetcher: BoxFetcher<Rc<dyn Any>>,
     updated_at: Instant,
     cache_time: Option<Duration>,
-    pub(crate) future_or_value: QueryCacheFuture,
     type_id: TypeId,
 }
 
@@ -125,9 +128,88 @@ impl Debug for Query {
             .field("updated_at", &self.updated_at)
             .field("cache_time", &self.cache_time)
             .field("type_id", &self.type_id)
-            .field("is_stale", &self.is_stale())
             .finish()
     }
 }
 
-pub(crate) mod x {}
+mod x {
+    use crate::{
+        client::fetch_with_retry, error::QueryError, fetcher::BoxFetcher, retry::Retryer, Error,
+    };
+    use futures::{
+        future::{LocalBoxFuture, Shared},
+        Future, FutureExt, TryFutureExt,
+    };
+    use instant::{Duration, Instant};
+    use std::{
+        any::{Any, TypeId},
+        rc::Rc,
+    };
+
+    struct Query {
+        type_id: TypeId,
+        fetcher: BoxFetcher<Rc<dyn Any>>,
+        cache_time: Option<Duration>,
+        updated_at: Option<Instant>,
+        last_value: Option<Rc<dyn Any>>,
+        future_or_value: Option<Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>>,
+    }
+
+    impl Query {
+        pub fn new<F, Fut, T, E>(f: F, cache_time: Option<Duration>) -> Self
+        where
+            F: Fn() -> Fut + 'static,
+            Fut: Future<Output = Result<T, E>> + 'static,
+            T: 'static,
+            E: Into<Error> + 'static,
+        {
+            let fetcher = BoxFetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
+            let type_id = TypeId::of::<T>();
+
+            Query {
+                fetcher,
+                type_id,
+                cache_time,
+                last_value: None,
+                future_or_value: None,
+                updated_at: None
+            }
+        }
+
+        fn assert_type<T: 'static>(&self) {
+            assert!(self.type_id == TypeId::of::<T>(), "type mismatch");
+        }
+
+        pub fn is_fetching(&self) -> bool {
+            match &self.future_or_value {
+                Some(x) => x.peek().is_none(),
+                None => false,
+            }
+        }
+
+        pub fn last_value<T: 'static>(&self) -> Option<Rc<T>> {
+            self.assert_type::<T>();
+            
+            match &self.last_value {
+                Some(x) => x.clone().downcast::<T>().ok(),
+                None => None,
+            }
+        }
+
+        pub async fn fetch<T: 'static>(&mut self, retrier: Option<Retryer>) -> Result<Rc<T>, Error> {
+            self.assert_type::<T>();
+
+            let fetcher = self.fetcher.clone();
+            let fut = fetch_with_retry(fetcher, retrier).boxed_local().shared();
+            let value = fut.await?;
+            let ret = value
+                .downcast::<T>()
+                .map_err(|_| QueryError::type_mismatch::<T>())?;
+
+            self.last_value = Some(ret.clone());
+            self.updated_at = Some(Instant::now());
+
+            Ok(ret)
+        }
+    }
+}

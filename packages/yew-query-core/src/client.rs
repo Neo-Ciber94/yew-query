@@ -57,7 +57,7 @@ impl QueryClient {
             let cache = self.cache.borrow();
             if let Some(query) = cache.get(&key) {
                 if !query.is_resolved() {
-                    // FIXME: We should not access the prop directly
+                    // FIXME: We should not access the `future_or_value` directly
                     let fut = query.future_or_value.clone();
                     drop(cache);
 
@@ -105,7 +105,7 @@ impl QueryClient {
         let _ = fut.await?;
         let cache = self.cache.borrow_mut();
 
-        assert!(cache.get(&key).unwrap().is_resolved());
+        debug_assert!(cache.get(&key).unwrap().is_resolved());
 
         let ret = cache
             .get(&key)
@@ -305,7 +305,7 @@ impl QueryClientBuilder {
     }
 }
 
-async fn fetch_with_retry<F, T>(fetcher: F, retrier: Option<Retryer>) -> Result<T, Error>
+pub(crate) async fn fetch_with_retry<F, T>(fetcher: F, retrier: Option<Retryer>) -> Result<T, Error>
 where
     F: Fetch<T> + 'static,
     T: 'static,
