@@ -9,7 +9,7 @@ use std::{
     any::{Any, TypeId},
     fmt::Debug,
     rc::Rc,
-    time::Duration,
+    time::Duration, cell::{Cell, RefCell},
 };
 
 // pub(crate) type QueryCacheFuture = Cached<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>;
@@ -20,13 +20,13 @@ pub struct Query {
     type_id: TypeId,
     fetcher: BoxFetcher<Rc<dyn Any>>,
     cache_time: Option<Duration>,
-    updated_at: Option<Instant>,
-    last_value: Option<Rc<dyn Any>>,
-    future_or_value: Option<Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>>,
+    updated_at: Rc<Cell<Option<Instant>>>,
+    last_value: Rc<RefCell<Option<Rc<dyn Any>>>>,
+    future_or_value: Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>,
 }
 
 impl Query {
-    pub fn new<F, Fut, T, E>(f: F, cache_time: Option<Duration>) -> Self
+    pub fn new<F, Fut, T, E>(f: F, retrier: Option<Retryer>, cache_time: Option<Duration>) -> Self
     where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
@@ -34,15 +34,16 @@ impl Query {
         E: Into<Error> + 'static,
     {
         let fetcher = BoxFetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
+        let future_or_value = fetch_with_retry(fetcher.clone(), retrier).boxed_local().shared();
         let type_id = TypeId::of::<T>();
 
         Query {
             fetcher,
             type_id,
             cache_time,
-            last_value: None,
-            future_or_value: None,
-            updated_at: None,
+            future_or_value,
+            last_value: Default::default(),
+            updated_at: Default::default(),
         }
     }
 
@@ -51,12 +52,12 @@ impl Query {
     }
 
     /// Returns a future that resolve to this query value.
-    pub async fn future<T: 'static>(&self) -> Option<Result<Rc<T>, Error>> {
+    pub async fn future<T: 'static>(&self) -> Result<Rc<T>, Error> {
         if self.type_id != TypeId::of::<T>() {
-            return Some(Err(Error::new(QueryError::type_mismatch::<T>())));
+            return Err(Error::new(QueryError::type_mismatch::<T>()));
         }
 
-        let fut = self.future_or_value.clone()?;
+        let fut = self.future_or_value.clone();
         let value = fut.await;
         match value {
             Ok(x) => {
@@ -64,30 +65,18 @@ impl Query {
                     .downcast::<T>()
                     .map_err(|_| QueryError::type_mismatch::<T>().into());
 
-                Some(ret)
+                ret
             }
-            Err(err) => Some(Err(err)),
+            Err(err) => Err(err),
         }
     }
 
     pub fn is_fetching(&self) -> bool {
-        println!("future_or_value is some: {}", self.future_or_value.is_some());
-        
-        match &self.future_or_value {
-            Some(x) => {
-                let ret = x.peek().is_none();
-                println!("fetching: {ret}");
-                ret
-            }
-            None => false,
-        }
+        self.future_or_value.peek().is_none()
     }
 
     pub fn last_value(&self) -> Option<Rc<dyn Any>> {
-        match &self.last_value {
-            Some(x) => Some(x.clone()),
-            None => None,
-        }
+        self.last_value.borrow().clone()
     }
 
     pub async fn fetch<T: 'static>(&mut self, retrier: Option<Retryer>) -> Result<Rc<T>, Error> {
@@ -97,23 +86,28 @@ impl Query {
         let fut = fetch_with_retry(fetcher, retrier).boxed_local().shared();
 
         // Updates the inner future
-        self.future_or_value = Some(fut.clone());
+        self.future_or_value = fut.clone();
+
+        log::trace!("Query::fetch() START");
 
         // Await and which updates the inner future
         let value = fut.await?;
+
+        log::trace!("Query::fetch() END");
+
         let ret = value
             .downcast::<T>()
             .map_err(|_| QueryError::type_mismatch::<T>())?;
 
-        self.last_value = Some(ret.clone());
-        self.updated_at = Some(Instant::now());
+        *self.last_value.borrow_mut() = Some(ret.clone());
+        self.updated_at.set(Some(Instant::now()));
 
         Ok(ret)
     }
 
     /// Returns `true` if the value of the query is expired.
     pub fn is_stale(&self) -> bool {
-        let Some(updated_at) = self.updated_at else {
+        let Some(updated_at) = self.updated_at.get() else {
             return false;
         };
 
@@ -137,9 +131,9 @@ impl Query {
         let value = futures::executor::block_on(fut.clone()).unwrap();
         debug_assert!(fut.peek().is_some());
 
-        self.future_or_value = Some(fut);
-        self.last_value = Some(value);
-        self.updated_at = Some(Instant::now());
+        self.future_or_value = fut;
+        *self.last_value.borrow_mut() = Some(value);
+        self.updated_at.set(Some(Instant::now()));
     }
 }
 
@@ -151,6 +145,7 @@ impl Debug for Query {
             .field("updated_at", &self.updated_at)
             .field("cache_time", &self.cache_time)
             .field("type_id", &self.type_id)
+            .field("is_stale", &self.is_stale())
             .finish()
     }
 }

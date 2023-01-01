@@ -54,29 +54,28 @@ impl QueryClient {
         {
             let cache = self.cache.borrow();
             if let Some(query) = cache.get(&key).cloned() {
+                log::trace!("{query:#?}");
                 log::trace!(
-                    "cache hit: is fetching: {}, is stale: {}",
+                    "cache hit: is fetching: {}, is stale: {}, last value: {}",
                     query.is_fetching(),
-                    query.is_stale()
+                    query.is_stale(),
+                    query.last_value().is_some()
                 );
                 // This prevent borrow errors
                 drop(cache);
 
-                if query.is_fetching() || !query.is_stale() {
-                    if let Some(last_value) = query.last_value() {
-                        log::trace!("returning from cache");
-                        let ret = last_value
-                            .downcast::<T>()
-                            .map_err(|_| QueryError::type_mismatch::<T>().into());
+                if !query.is_stale() && query.last_value().is_some() {
+                    log::trace!("returning cache value");
+                    let last_value = query.last_value().clone().unwrap();
+                    let ret = last_value
+                        .downcast::<T>()
+                        .map_err(|_| QueryError::type_mismatch::<T>().into());
 
-                        return ret;
-                    }
-
-                    // Fallback to the current query
-                    if let Some(ret) = query.future::<T>().await {
-                        log::trace!("returning future");
-                        return ret;
-                    }
+                    return ret;
+                } else if query.is_fetching() {
+                    log::trace!("returning future");
+                    let ret = query.future::<T>().await;
+                    return ret;
                 }
             }
         }
@@ -91,15 +90,29 @@ impl QueryClient {
             return Ok(Rc::new(ret));
         }
 
-        let mut query = Query::new(f, self.stale_time.clone());
-        {
+        let mut query = {
             let mut cache = self.cache.borrow_mut();
-            cache.set(key.clone(), query.clone());
-            log::trace!("storing in cache");
-        }
+            match cache.get(&key).cloned() {
+                Some(x) => {
+                    log::trace!("getting query from cache");
+                    x
+                }
+                None => {
+                    let query = Query::new(f, retrier.clone(), self.stale_time.clone());
+                    cache.set(key.clone(), query.clone());
+                    log::trace!("storing query in cache");
+                    query
+                }
+            }
+        };
+
+        log::trace!("QueryClient::fetch_query() START");
 
         // Await the value what will update the copy in the cache
         let value = query.fetch::<T>(retrier).await?;
+
+        log::trace!("QueryClient::fetch_query() END");
+
         Ok(value)
     }
 
