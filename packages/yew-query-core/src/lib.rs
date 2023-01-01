@@ -13,5 +13,3 @@ pub mod id;
 pub mod error;
 pub use error::Error;
 
-//
-pub(crate) mod futures;
