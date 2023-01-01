@@ -35,6 +35,12 @@ impl<T> Clone for BoxFetcher<T> {
     }
 }
 
+impl<T> std::fmt::Debug for BoxFetcher<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+       write!(f, "BoxFetcher")
+    }
+}
+
 pub struct InfiniteFetcher<T>(Box<dyn Fn(usize) -> TryBoxFuture<T>>);
 
 impl<T> InfiniteFetcher<T> {
