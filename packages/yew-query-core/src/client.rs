@@ -54,18 +54,10 @@ impl QueryClient {
         {
             let cache = self.cache.borrow();
             if let Some(query) = cache.get(&key).cloned() {
-                log::trace!("{query:#?}");
-                log::trace!(
-                    "cache hit: is fetching: {}, is stale: {}, last value: {}",
-                    query.is_fetching(),
-                    query.is_stale(),
-                    query.last_value().is_some()
-                );
                 // This prevent borrow errors
                 drop(cache);
 
                 if !query.is_stale() && query.last_value().is_some() {
-                    log::trace!("returning cache value");
                     let last_value = query.last_value().clone().unwrap();
                     let ret = last_value
                         .downcast::<T>()
@@ -73,7 +65,6 @@ impl QueryClient {
 
                     return ret;
                 } else if query.is_fetching() {
-                    log::trace!("returning future");
                     let ret = query.future::<T>().await;
                     return ret;
                 }
@@ -85,7 +76,6 @@ impl QueryClient {
 
         // Only store the result in the cache if had stale time
         if !can_cache {
-            log::trace!("no cache");
             let ret = fetch_with_retry(f, retrier).await?;
             return Ok(Rc::new(ret));
         }
@@ -93,25 +83,18 @@ impl QueryClient {
         let mut query = {
             let mut cache = self.cache.borrow_mut();
             match cache.get(&key).cloned() {
-                Some(x) => {
-                    log::trace!("getting query from cache");
-                    x
-                }
+                Some(x) => x,
                 None => {
                     let query = Query::new(f, retrier.clone(), self.stale_time.clone());
                     cache.set(key.clone(), query.clone());
-                    log::trace!("storing query in cache");
+
                     query
                 }
             }
         };
 
-        log::trace!("QueryClient::fetch_query() START");
-
         // Await the value what will update the copy in the cache
         let value = query.fetch::<T>(retrier).await?;
-
-        log::trace!("QueryClient::fetch_query() END");
 
         Ok(value)
     }

@@ -115,13 +115,9 @@ impl Query {
             inner.future_or_value = fut.clone();
             fut
         };
-
-        log::trace!("Query::fetch() START");
-
+        
         // Await and which updates the inner future
         let value = fut.await?;
-
-        log::trace!("Query::fetch() END");
 
         let ret = value
             .downcast::<T>()

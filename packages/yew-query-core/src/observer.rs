@@ -69,8 +69,6 @@ where
 
         // If the value is cached and still fresh return
         if is_cached && !self.client.is_stale(key) && last_value.is_some() {
-            log::trace!("{key} is cached");
-
             callback(QueryEvent {
                 state: QueryState::Ready,
                 is_fetching,
@@ -80,23 +78,23 @@ where
         }
 
         // If value is not in cache we set the loading state
-        if is_cached {
-            callback(QueryEvent {
-                state: QueryState::Idle,
-                is_fetching: true,
-                value: last_value,
-            });
-        } else {
+        if !is_cached {
             callback(QueryEvent {
                 state: QueryState::Loading,
                 is_fetching: true,
                 value: None,
             });
+        } else {
+            callback(QueryEvent {
+                state: QueryState::Ready,
+                is_fetching: true,
+                value: last_value,
+            });
         }
 
         let key = key.clone();
         let client = self.client.clone();
-        
+
         spawn_local(async move {
             let mut client = client;
             let ret = client.fetch_query(key, fetch).await;
