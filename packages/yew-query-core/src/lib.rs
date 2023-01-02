@@ -10,6 +10,5 @@ pub mod state;
 #[doc(hidden)]
 pub mod timeout;
 
-pub mod id;
 pub mod error;
 pub use error::Error;
