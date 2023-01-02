@@ -903,7 +903,6 @@ dependencies = [
  "futures",
  "instant",
  "log",
- "pin-project-lite",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",

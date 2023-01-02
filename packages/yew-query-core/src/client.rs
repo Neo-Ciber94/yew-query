@@ -15,6 +15,7 @@ use std::{
 pub struct QueryClient {
     cache: Rc<RefCell<dyn QueryCache>>,
     stale_time: Option<Duration>,
+    refetch_time: Option<Duration>,
     retry: Option<Retryer>,
 }
 
@@ -222,6 +223,7 @@ impl Debug for QueryClient {
 pub struct QueryClientBuilder {
     cache: Option<Rc<RefCell<dyn QueryCache>>>,
     stale_time: Option<Duration>,
+    refetch_time: Option<Duration>,
     retry: Option<Retryer>,
 }
 
@@ -234,6 +236,12 @@ impl QueryClientBuilder {
     /// Sets the max time a query can be reused from cache.
     pub fn stale_time(mut self, stale_time: Duration) -> Self {
         self.stale_time = Some(stale_time);
+        self
+    }
+
+    /// Sets the interval at which the data will be refetched.
+    pub fn refetch_time(mut self, refetch_time: Duration) -> Self {
+        self.refetch_time = Some(refetch_time);
         self
     }
 
@@ -262,6 +270,7 @@ impl QueryClientBuilder {
             stale_time,
             retry,
             cache,
+            refetch_time
         } = self;
 
         let cache = cache
@@ -271,6 +280,7 @@ impl QueryClientBuilder {
         QueryClient {
             cache,
             stale_time,
+            refetch_time,
             retry,
         }
     }

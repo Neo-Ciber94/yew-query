@@ -3,6 +3,7 @@ use crate::key::QueryKey;
 use super::query::Query;
 use std::collections::{BTreeMap, HashMap};
 use std::fmt::Debug;
+
 /// Provides a way to store the query data.
 pub trait QueryCache: Debug {
     /// Returns the cache entry with the given key.
