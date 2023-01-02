@@ -1,5 +1,5 @@
 use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retryer, Error};
-use crate::{fetcher::Fetch, key::QueryKey, observer::QueryState};
+use crate::{fetcher::Fetch, key::QueryKey, state::QueryState};
 use std::{
     any::{Any, TypeId},
     cell::RefCell,
@@ -144,6 +144,10 @@ impl QueryClient {
     }
 
     /// Returns the state of the query with the given key.
+    /// 
+    /// # Returns
+    /// - `Some(QueryState)`: with the state of the query.
+    /// - `None`: if the query do not exists.
     pub fn get_query_state(&self, key: &QueryKey) -> Option<QueryState> {
         self.cache.borrow().get(key).clone().map(|x| x.state())
     }

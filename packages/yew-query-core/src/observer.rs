@@ -3,16 +3,7 @@ use std::{marker::PhantomData, rc::Rc};
 use wasm_bindgen_futures::spawn_local;
 use yew::virtual_dom::Key;
 
-use crate::{client::QueryClient, key::QueryKey, Error};
-
-/// Represents the state of a query.
-#[derive(Clone, Debug)]
-pub enum QueryState {
-    Idle,
-    Loading,
-    Ready,
-    Failed(Error),
-}
+use crate::{client::QueryClient, key::QueryKey, state::QueryState, Error};
 
 /// An event emitted when executing a query.
 pub struct QueryEvent<T> {

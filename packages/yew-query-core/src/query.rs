@@ -1,5 +1,5 @@
 use super::{error::QueryError, fetcher::BoxFetcher};
-use crate::{client::fetch_with_retry, observer::QueryState, retry::Retryer, Error};
+use crate::{client::fetch_with_retry, retry::Retryer, state::QueryState, Error};
 use futures::{
     future::{ready, LocalBoxFuture, Shared},
     Future, FutureExt, TryFutureExt,

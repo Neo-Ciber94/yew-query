@@ -3,16 +3,14 @@ use crate::common::{
     use_abort_controller, use_is_first_render, use_on_online, use_on_window_focus,
 };
 use futures::Future;
+use yew_query_core::state::QueryState;
 use std::rc::Rc;
 use web_sys::AbortSignal;
 use yew::virtual_dom::Key;
 use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle};
 use yew_query_core::key::QueryKey;
 use yew_query_core::observer::QueryEvent;
-use yew_query_core::{
-    observer::{QueryObserver, QueryState},
-    Error,
-};
+use yew_query_core::{observer::QueryObserver, Error};
 
 /// Options for a `use_query`.
 pub struct UseQueryOptions<Fut, T, E>
