@@ -6,6 +6,7 @@ use yew::virtual_dom::Key;
 use crate::{client::QueryClient, key::QueryKey, Error};
 
 /// Represents the state of a query.
+#[derive(Clone, Debug)]
 pub enum QueryState {
     Idle,
     Loading,
@@ -63,31 +64,17 @@ where
         C: Fn(QueryEvent<T>) + 'static,
     {
         let key = &self.key;
-        let last_value = self.get_last_value();
-        let is_cached = self.client.contains_query(key);
-        let is_fetching = self.client.is_fetching(key);
 
-        // If the value is cached and still fresh return
-        if is_cached && !self.client.is_stale(key) && last_value.is_some() {
+        {
+            let client = self.client.clone();
+            let state = client.get_query_state(key).unwrap_or(QueryState::Idle);
+            let last_value = self.get_last_value();
+            let is_fetching = client.is_fetching(key);
+
+            // Set initial state
             callback(QueryEvent {
-                state: QueryState::Ready,
+                state,
                 is_fetching,
-                value: last_value,
-            });
-            return;
-        }
-
-        // If value is not in cache we set the loading state
-        if !is_cached {
-            callback(QueryEvent {
-                state: QueryState::Loading,
-                is_fetching: true,
-                value: None,
-            });
-        } else {
-            callback(QueryEvent {
-                state: QueryState::Ready,
-                is_fetching: true,
                 value: last_value,
             });
         }

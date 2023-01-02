@@ -1,5 +1,5 @@
 use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retryer, Error};
-use crate::{fetcher::Fetch, key::QueryKey};
+use crate::{fetcher::Fetch, key::QueryKey, observer::QueryState};
 use std::{
     any::{Any, TypeId},
     cell::RefCell,
@@ -141,6 +141,11 @@ impl QueryClient {
                     .map(|x| x.downcast::<T>().unwrap())
                     .map_err(|_| QueryError::type_mismatch::<T>())
             })
+    }
+
+    /// Returns the state of the query with the given key.
+    pub fn get_query_state(&self, key: &QueryKey) -> Option<QueryState> {
+        self.cache.borrow().get(key).clone().map(|x| x.state())
     }
 
     /// Sets cache value for given key.

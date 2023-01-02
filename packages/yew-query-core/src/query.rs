@@ -1,5 +1,5 @@
 use super::{error::QueryError, fetcher::BoxFetcher};
-use crate::{client::fetch_with_retry, retry::Retryer, Error};
+use crate::{client::fetch_with_retry, observer::QueryState, retry::Retryer, Error};
 use futures::{
     future::{ready, LocalBoxFuture, Shared},
     Future, FutureExt, TryFutureExt,
@@ -19,6 +19,7 @@ struct Inner {
     updated_at: Option<Instant>,
     last_value: Option<Rc<dyn Any>>,
     future_or_value: Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>,
+    state: QueryState,
 }
 
 impl Debug for Inner {
@@ -29,6 +30,7 @@ impl Debug for Inner {
             .field("updated_at", &self.updated_at)
             .field("last_value", &self.last_value)
             .field("future_or_value", &self.future_or_value)
+            .field("state", &self.state)
             .finish()
     }
 }
@@ -58,6 +60,7 @@ impl Query {
             fetcher,
             cache_time,
             future_or_value,
+            state: QueryState::Idle,
             last_value: Default::default(),
             updated_at: Default::default(),
         }));
@@ -67,6 +70,10 @@ impl Query {
 
     fn assert_type<T: 'static>(&self) {
         assert!(self.type_id == TypeId::of::<T>(), "type mismatch");
+    }
+
+    pub fn state(&self) -> QueryState {
+        self.inner.read().unwrap().state.clone()
     }
 
     /// Returns a future that resolve to this query value.
@@ -106,6 +113,12 @@ impl Query {
     pub async fn fetch<T: 'static>(&mut self, retrier: Option<Retryer>) -> Result<Rc<T>, Error> {
         self.assert_type::<T>();
 
+        // Only when is empty will be loading, otherwise may use the cache last value.
+        if self.last_value().is_none() {
+            let mut inner = self.inner.write().expect("failed to write in query");
+            inner.state = QueryState::Loading;
+        }
+
         let fut = {
             let mut inner = self.inner.write().expect("failed to write in query");
             let fetcher = inner.fetcher.clone();
@@ -115,9 +128,16 @@ impl Query {
             inner.future_or_value = fut.clone();
             fut
         };
-        
+
         // Await and which updates the inner future
-        let value = fut.await?;
+        let value = match fut.await {
+            Ok(x) => x,
+            Err(err) => {
+                let mut inner = self.inner.write().expect("failed to write in query");
+                inner.state = QueryState::Failed(err.clone());
+                return Err(err);
+            }
+        };
 
         let ret = value
             .downcast::<T>()
@@ -126,6 +146,7 @@ impl Query {
         let mut inner = self.inner.write().expect("failed to write in query");
         inner.last_value = Some(ret.clone());
         inner.updated_at = Some(Instant::now());
+        inner.state = QueryState::Ready;
 
         Ok(ret)
     }
@@ -163,6 +184,7 @@ impl Query {
 
         let mut inner = self.inner.write().expect("failed to write in query");
         inner.future_or_value = fut;
+        inner.state = QueryState::Ready;
         inner.last_value = Some(value);
         inner.updated_at = Some(Instant::now());
     }
