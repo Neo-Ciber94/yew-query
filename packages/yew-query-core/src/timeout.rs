@@ -8,13 +8,14 @@ use web_sys::window;
 pub struct Timeout(i32);
 
 impl Timeout {
-    pub fn new<F>(millis: i32, f: F) -> Self
+    pub fn new<F>(millis: u32, f: F) -> Self
     where
         F: Fn() + 'static,
     {
         let window = window().expect("expected `window`");
         let handler = Rc::new(Closure::wrap(Box::new(move || f()) as Box<dyn FnMut()>));
-
+        let millis = i32::try_from(millis).expect("millis is too large");
+        
         let id = window
             .set_timeout_with_callback_and_timeout_and_arguments_0(
                 &(&*handler).as_ref().unchecked_ref(),

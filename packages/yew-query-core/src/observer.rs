@@ -1,9 +1,8 @@
 use futures::Future;
+use prokio::spawn_local;
 use std::{marker::PhantomData, rc::Rc};
-use wasm_bindgen_futures::spawn_local;
-use yew::virtual_dom::Key;
 
-use crate::{client::QueryClient, key::QueryKey, state::QueryState, Error};
+use crate::{client::QueryClient, key::{QueryKey, Key}, state::QueryState, Error};
 
 /// An event emitted when executing a query.
 pub struct QueryEvent<T> {

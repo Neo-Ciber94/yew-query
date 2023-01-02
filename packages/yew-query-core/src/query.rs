@@ -13,26 +13,15 @@ use std::{
     time::Duration,
 };
 
+#[derive(Debug)]
 struct Inner {
     fetcher: BoxFetcher<Rc<dyn Any>>,
     cache_time: Option<Duration>,
+    refetch_time: Option<Duration>,
     updated_at: Option<Instant>,
     last_value: Option<Rc<dyn Any>>,
     future_or_value: Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>,
     state: QueryState,
-}
-
-impl Debug for Inner {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Inner")
-            .field("fetcher", &self.fetcher)
-            .field("cache_time", &self.cache_time)
-            .field("updated_at", &self.updated_at)
-            .field("last_value", &self.last_value)
-            .field("future_or_value", &self.future_or_value)
-            .field("state", &self.state)
-            .finish()
-    }
 }
 
 /// Represents a query.
@@ -43,7 +32,12 @@ pub struct Query {
 }
 
 impl Query {
-    pub fn new<F, Fut, T, E>(f: F, retrier: Option<Retryer>, cache_time: Option<Duration>) -> Self
+    pub fn new<F, Fut, T, E>(
+        f: F,
+        retrier: Option<Retryer>,
+        cache_time: Option<Duration>,
+        refetch_time: Option<Duration>,
+    ) -> Self
     where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
@@ -59,6 +53,7 @@ impl Query {
         let inner = Arc::new(RwLock::new(Inner {
             fetcher,
             cache_time,
+            refetch_time,
             future_or_value,
             state: QueryState::Idle,
             last_value: Default::default(),

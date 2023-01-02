@@ -6,9 +6,8 @@ use futures::Future;
 use yew_query_core::state::QueryState;
 use std::rc::Rc;
 use web_sys::AbortSignal;
-use yew::virtual_dom::Key;
 use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle};
-use yew_query_core::key::QueryKey;
+use yew_query_core::key::{QueryKey, Key};
 use yew_query_core::observer::QueryEvent;
 use yew_query_core::{observer::QueryObserver, Error};
 

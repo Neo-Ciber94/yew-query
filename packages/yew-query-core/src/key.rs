@@ -1,8 +1,9 @@
 use std::{
     any::TypeId,
-    fmt::{Debug, Display},
+    fmt::{self, Debug, Display, Formatter},
+    ops::Deref,
+    rc::Rc,
 };
-use yew::virtual_dom::Key;
 
 use self::x::TypeNameCache;
 
@@ -10,6 +11,64 @@ use self::x::TypeNameCache;
 thread_local! {
     static TYPE_NAMES: TypeNameCache = TypeNameCache::new();
 }
+
+/// An string key to identify a query.
+#[derive(Clone, Debug, Ord, PartialOrd, Eq, PartialEq, Hash)]
+pub struct Key {
+    key: Rc<str>,
+}
+
+impl Display for Key {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        std::fmt::Display::fmt(&self.key, f)
+    }
+}
+
+impl Deref for Key {
+    type Target = str;
+
+    fn deref(&self) -> &str {
+        self.key.as_ref()
+    }
+}
+
+impl From<Rc<str>> for Key {
+    fn from(key: Rc<str>) -> Self {
+        Self { key }
+    }
+}
+
+impl From<&'_ str> for Key {
+    fn from(key: &'_ str) -> Self {
+        let key: Rc<str> = Rc::from(key);
+        Self::from(key)
+    }
+}
+
+macro_rules! key_impl_from_to_string {
+    ($type:ty) => {
+        impl From<$type> for Key {
+            fn from(key: $type) -> Self {
+                Self::from(key.to_string().as_str())
+            }
+        }
+    };
+}
+
+key_impl_from_to_string!(String);
+key_impl_from_to_string!(char);
+key_impl_from_to_string!(u8);
+key_impl_from_to_string!(u16);
+key_impl_from_to_string!(u32);
+key_impl_from_to_string!(u64);
+key_impl_from_to_string!(u128);
+key_impl_from_to_string!(usize);
+key_impl_from_to_string!(i8);
+key_impl_from_to_string!(i16);
+key_impl_from_to_string!(i32);
+key_impl_from_to_string!(i64);
+key_impl_from_to_string!(i128);
+key_impl_from_to_string!(isize);
 
 /// A key to identify a query.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]

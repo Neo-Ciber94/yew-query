@@ -86,7 +86,7 @@ impl QueryClient {
             match cache.get(&key).cloned() {
                 Some(x) => x,
                 None => {
-                    let query = Query::new(f, retrier.clone(), self.stale_time.clone());
+                    let query = Query::new(f, retrier.clone(), self.stale_time, self.refetch_time);
                     cache.set(key.clone(), query.clone());
 
                     query
@@ -147,7 +147,7 @@ impl QueryClient {
     }
 
     /// Returns the state of the query with the given key.
-    /// 
+    ///
     /// # Returns
     /// - `Some(QueryState)`: with the state of the query.
     /// - `None`: if the query do not exists.
@@ -272,7 +272,7 @@ impl QueryClientBuilder {
             stale_time,
             retry,
             cache,
-            refetch_time
+            refetch_time,
         } = self;
 
         let cache = cache
@@ -302,65 +302,10 @@ where
     if let Some(retrier) = retrier {
         let retry = retrier.get();
         for delay in retry {
-            //utils::sleep(delay).await;
-            yew::platform::time::sleep(delay).await;
+            prokio::time::sleep(delay).await;
             ret = fetcher.get().await;
         }
     }
 
     ret
-}
-
-#[allow(dead_code)]
-mod utils {
-    use futures::Future;
-    use instant::Instant;
-    use std::{task::Poll, time::Duration};
-
-    pub async fn sleep(duration: Duration) {
-        Sleep::new(duration).await
-    }
-
-    pub struct Sleep {
-        start: Option<Instant>,
-        duration: Duration,
-        done: bool,
-    }
-
-    impl Sleep {
-        pub fn new(duration: Duration) -> Self {
-            Sleep {
-                start: None,
-                duration,
-                done: false,
-            }
-        }
-    }
-
-    impl Future for Sleep {
-        type Output = ();
-
-        fn poll(
-            mut self: std::pin::Pin<&mut Self>,
-            _: &mut std::task::Context<'_>,
-        ) -> std::task::Poll<Self::Output> {
-            let mut this = self.as_mut();
-
-            if this.done {
-                panic!("attempting to poll future after done");
-            }
-
-            let start = this.start.get_or_insert_with(|| Instant::now());
-            let now = Instant::now();
-            let elapsed = now - *start;
-            let duration = self.duration;
-
-            if elapsed > duration {
-                self.done = true;
-                Poll::Ready(())
-            } else {
-                Poll::Pending
-            }
-        }
-    }
 }
