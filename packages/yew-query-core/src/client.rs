@@ -290,8 +290,8 @@ where
     if let Some(retrier) = retrier {
         let retry = retrier.get();
         for delay in retry {
-            utils::sleep(delay).await;
-            //yew::platform::time::sleep(delay).await;
+            //utils::sleep(delay).await;
+            yew::platform::time::sleep(delay).await;
             ret = fetcher.get().await;
         }
     }
@@ -299,6 +299,7 @@ where
     ret
 }
 
+#[allow(dead_code)]
 mod utils {
     use futures::Future;
     use instant::Instant;
