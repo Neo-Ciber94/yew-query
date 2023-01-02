@@ -7,10 +7,15 @@ keywords = ["wasm", "async"]
 license = "MIT"
 
 [dependencies]
-yew = "0.20"
 futures = "0.3.25"
+log = "0.4.17"
+
+# TODO: Remove this dependencies from code.
+# It's preferred to allow this library to work in any WASM environment like WASI,
+# for that we require to remove any web dependency and rewrite the code.
+
 wasm-bindgen = "0.2.83"
 wasm-bindgen-futures = "0.4.33"
 web-sys = { version = "0.3.60" }
 instant = { version = "0.1", features = ["wasm-bindgen", "inaccurate"] }
-log = "0.4.17"
+yew = "0.20"
