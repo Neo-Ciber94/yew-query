@@ -1,10 +1,13 @@
 use super::{error::QueryError, fetcher::BoxFetcher};
-use crate::{client::fetch_with_retry, retry::Retryer, state::QueryState, Error};
+use crate::{
+    client::fetch_with_retry, retry::Retryer, state::QueryState, time::interval::Interval, Error,
+};
 use futures::{
     future::{ready, LocalBoxFuture, Shared},
     Future, FutureExt, TryFutureExt,
 };
 use instant::Instant;
+use prokio::spawn_local;
 use std::{
     any::{Any, TypeId},
     fmt::Debug,
@@ -21,6 +24,7 @@ struct Inner {
     updated_at: Option<Instant>,
     last_value: Option<Rc<dyn Any>>,
     future_or_value: Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>,
+    interval: Option<Interval>,
     state: QueryState,
 }
 
@@ -56,8 +60,9 @@ impl Query {
             refetch_time,
             future_or_value,
             state: QueryState::Idle,
-            last_value: Default::default(),
-            updated_at: Default::default(),
+            last_value: None,
+            updated_at: None,
+            interval: None,
         }));
 
         Query { type_id, inner }
@@ -117,7 +122,9 @@ impl Query {
         let fut = {
             let mut inner = self.inner.write().expect("failed to write in query");
             let fetcher = inner.fetcher.clone();
-            let fut = fetch_with_retry(fetcher, retrier).boxed_local().shared();
+            let fut = fetch_with_retry(fetcher, retrier.clone())
+                .boxed_local()
+                .shared();
 
             // Updates the inner future
             inner.future_or_value = fut.clone();
@@ -134,11 +141,38 @@ impl Query {
             }
         };
 
+        let mut inner = self.inner.write().expect("failed to write in query");
+
+        if let Some(refetch_time) = inner.refetch_time {
+            if let Some(interval) = inner.interval.take() {
+                interval.cancel();
+            };
+
+            let this = self.clone();
+            let retrier = retrier.clone();
+            let interval = Interval::new(refetch_time, move || {
+                let this = this.clone();
+                let retrier = retrier.clone();
+
+                spawn_local(async move {
+                    log::trace!("refetching...");
+
+                    let mut this = this.clone();
+                    if let Err(_) = this.fetch::<T>(retrier).await {
+                        // Nothing to do, if fail the query will update its inner state
+                    }
+
+                    log::trace!("refetch done");
+                });
+            });
+
+            inner.interval = Some(interval);
+        }
+
         let ret = value
             .downcast::<T>()
             .map_err(|_| QueryError::type_mismatch::<T>())?;
 
-        let mut inner = self.inner.write().expect("failed to write in query");
         inner.last_value = Some(ret.clone());
         inner.updated_at = Some(Instant::now());
         inner.state = QueryState::Ready;

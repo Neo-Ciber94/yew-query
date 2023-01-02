@@ -79,6 +79,7 @@ fn Content() -> Html {
 fn App() -> Html {
     let client = QueryClient::builder()
         .stale_time(Duration::from_secs(3))
+        .refetch_time(Duration::from_secs(4))
         .cache(HashMap::new())
         .build();
 
