@@ -104,6 +104,8 @@ impl QueryClient {
     pub async fn refetch_query<T: 'static>(&mut self, key: QueryKey) -> Result<Rc<T>, Error> {
         let cache = self.cache.borrow_mut();
         let query = cache.get(&key).cloned();
+
+        // We drop ownership to prevent borrow errors
         drop(cache);
 
         let Some(mut query) = query else {
