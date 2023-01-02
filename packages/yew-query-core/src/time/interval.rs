@@ -2,7 +2,6 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
-
 use instant::Duration;
 use prokio::spawn_local;
 
