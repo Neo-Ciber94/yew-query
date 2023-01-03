@@ -4,12 +4,11 @@ use std::{
     ops::Deref,
     rc::Rc,
 };
-
-use self::x::TypeNameCache;
+use self::x::TypeNameMap;
 
 #[cfg(debug_assertions)]
 thread_local! {
-    static TYPE_NAMES: TypeNameCache = TypeNameCache::new();
+    static TYPE_NAMES: TypeNameMap = TypeNameMap::new();
 }
 
 /// An string key to identify a query.
@@ -70,7 +69,7 @@ key_impl_from_to_string!(i64);
 key_impl_from_to_string!(i128);
 key_impl_from_to_string!(isize);
 
-/// A key to identify a query.
+/// Represents a type that identifies a query by key and type.
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct QueryKey {
     key: Key,
@@ -139,11 +138,11 @@ mod x {
     };
 
     #[derive(Default)]
-    pub struct TypeNameCache {
+    pub struct TypeNameMap {
         data: RefCell<HashMap<TypeId, &'static str>>,
     }
 
-    impl TypeNameCache {
+    impl TypeNameMap {
         pub fn new() -> Self {
             Default::default()
         }
