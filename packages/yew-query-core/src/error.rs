@@ -4,10 +4,12 @@ use std::sync::Arc;
 
 use std::error::Error as StdError;
 
+/// A cloneable error type.
 #[derive(Clone)]
 pub struct Error(Arc<dyn StdError + Send + Sync + 'static>);
 
 impl Error {
+    /// Constructs an error.
     pub fn new<E>(error: E) -> Self
     where
         E: StdError + Send + Sync + 'static,
