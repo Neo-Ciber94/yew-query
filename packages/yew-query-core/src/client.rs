@@ -14,7 +14,7 @@ use std::{
 #[derive(Clone)]
 pub struct QueryClient {
     cache: Rc<RefCell<dyn QueryCache>>,
-    stale_time: Option<Duration>,
+    cache_time: Option<Duration>,
     refetch_time: Option<Duration>,
     retry: Option<Retryer>,
 }
@@ -72,7 +72,7 @@ impl QueryClient {
             }
         }
 
-        let can_cache = self.stale_time.is_some();
+        let can_cache = self.cache_time.is_some();
         let retrier = self.retry.clone();
 
         // Only store the result in the cache if had stale time
@@ -86,7 +86,7 @@ impl QueryClient {
             match cache.get(&key).cloned() {
                 Some(x) => x,
                 None => {
-                    let query = Query::new(f, retrier.clone(), self.stale_time, self.refetch_time);
+                    let query = Query::new(f, retrier.clone(), self.cache_time, self.refetch_time);
                     cache.set(key.clone(), query.clone());
 
                     query
@@ -203,19 +203,19 @@ impl QueryClient {
     }
 }
 
-impl PartialEq for QueryClient {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.cache, &other.cache)
-    }
-}
-
 impl Debug for QueryClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("QueryClient")
             .field("cache", &self.cache)
-            .field("stale_time", &self.stale_time)
+            .field("stale_time", &self.cache_time)
             .field("retry", &"Retryer")
             .finish()
+    }
+}
+
+impl PartialEq for QueryClient {
+    fn eq(&self, other: &Self) -> bool {
+        Rc::ptr_eq(&self.cache, &other.cache)
     }
 }
 
@@ -223,7 +223,7 @@ impl Debug for QueryClient {
 #[derive(Default)]
 pub struct QueryClientBuilder {
     cache: Option<Rc<RefCell<dyn QueryCache>>>,
-    stale_time: Option<Duration>,
+    cache_time: Option<Duration>,
     refetch_time: Option<Duration>,
     retry: Option<Retryer>,
 }
@@ -234,9 +234,9 @@ impl QueryClientBuilder {
         Default::default()
     }
 
-    /// Sets the max time a query can be reused from cache.
-    pub fn stale_time(mut self, stale_time: Duration) -> Self {
-        self.stale_time = Some(stale_time);
+    /// Sets the time a query can be reused from cache.
+    pub fn cache_time(mut self, cache_time: Duration) -> Self {
+        self.cache_time = Some(cache_time);
         self
     }
 
@@ -268,7 +268,7 @@ impl QueryClientBuilder {
     /// Returns the `QueryClient` using this builder options.
     pub fn build(self) -> QueryClient {
         let Self {
-            stale_time,
+            cache_time: stale_time,
             retry,
             cache,
             refetch_time,
@@ -280,7 +280,7 @@ impl QueryClientBuilder {
 
         QueryClient {
             cache,
-            stale_time,
+            cache_time: stale_time,
             refetch_time,
             retry,
         }

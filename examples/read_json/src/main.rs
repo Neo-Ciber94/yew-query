@@ -20,7 +20,7 @@ struct ColorData {
 #[tokio::main]
 async fn main() {
     let mut client = QueryClient::builder()
-        .stale_time(Duration::from_secs(5))
+        .cache_time(Duration::from_secs(5))
         .refetch_time(Duration::from_secs(2))
         .build();
 
