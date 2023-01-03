@@ -76,3 +76,40 @@ impl QueryCache for BTreeMap<QueryKey, Query> {
         self.clear()
     }
 }
+
+impl QueryCache for Vec<(QueryKey, Query)> {
+    fn get(&self, key: &QueryKey) -> Option<&Query> {
+        self.iter()
+            .find_map(|(k, v)| if key == k { Some(v) } else { None })
+    }
+
+    fn get_mut(&mut self, key: &QueryKey) -> Option<&mut Query> {
+        self.iter_mut()
+            .find_map(|(k, v)| if key == k { Some(v) } else { None })
+    }
+
+    fn set(&mut self, key: QueryKey, entry: Query) {
+        if let Some(idx) = self.iter_mut().position(|(k, _)| k == &key) {
+            self[idx] = (key, entry);
+        } else {
+            self.push((key, entry));
+        }
+    }
+
+    fn remove(&mut self, key: &QueryKey) -> Option<Query> {
+        if let Some(idx) = self.iter().position(|(k, _)| k == key) {
+            let (_, query) = self.remove(idx);
+            Some(query)
+        } else {
+            None
+        }
+    }
+
+    fn has(&self, key: &QueryKey) -> bool {
+        self.get(key).is_some()
+    }
+
+    fn clear(&mut self) {
+        self.clear();
+    }
+}
