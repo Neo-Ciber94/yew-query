@@ -191,9 +191,9 @@ impl QueryClient {
     }
 
     /// Removes the query with the given key from the cache.
-    pub fn remove_query_data(&mut self, key: &QueryKey) {
+    pub fn remove_query_data(&mut self, key: &QueryKey) -> bool {
         let mut cache = self.cache.borrow_mut();
-        cache.remove(key);
+        cache.remove(key).is_some()
     }
 
     /// Removes all the query data from the cache.
