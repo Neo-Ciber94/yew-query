@@ -10,4 +10,4 @@ pub mod error;
 pub use error::Error;
 
 //
-pub mod time;
+pub(crate) mod time;

@@ -79,14 +79,14 @@ pub struct QueryKey {
 
 impl QueryKey {
     /// Constructs a `QueryKey` for the given type and key.
-    pub fn of<T: 'static>(key: Key) -> Self {
+    pub fn of<T: 'static>(key: impl Into<Key>) -> Self {
         #[cfg(debug_assertions)]
         {
             TYPE_NAMES.with(|x| x.register::<T>());
         }
 
         QueryKey {
-            key,
+            key: key.into(),
             ty: TypeId::of::<T>(),
         }
     }

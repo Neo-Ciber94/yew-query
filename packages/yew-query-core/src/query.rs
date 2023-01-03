@@ -19,6 +19,7 @@ use std::{
 #[derive(Debug)]
 struct Inner {
     fetcher: BoxFetcher<Rc<dyn Any>>,
+    retrier: Option<Retryer>,
     cache_time: Option<Duration>,
     refetch_time: Option<Duration>,
     updated_at: Option<Instant>,
@@ -36,6 +37,7 @@ pub struct Query {
 }
 
 impl Query {
+    /// Constructs a new `Query`
     pub fn new<F, Fut, T, E>(
         f: F,
         retrier: Option<Retryer>,
@@ -50,12 +52,13 @@ impl Query {
     {
         let type_id = TypeId::of::<T>();
         let fetcher = BoxFetcher::new(move || f().map_ok(|x| Rc::new(x) as Rc<dyn Any>));
-        let future_or_value = fetch_with_retry(fetcher.clone(), retrier)
+        let future_or_value = fetch_with_retry(fetcher.clone(), retrier.clone())
             .boxed_local()
             .shared();
 
         let inner = Arc::new(RwLock::new(Inner {
             fetcher,
+            retrier,
             cache_time,
             refetch_time,
             future_or_value,
@@ -72,6 +75,7 @@ impl Query {
         assert!(self.type_id == TypeId::of::<T>(), "type mismatch");
     }
 
+    /// Returns the state of this query.
     pub fn state(&self) -> QueryState {
         self.inner.read().unwrap().state.clone()
     }
@@ -102,15 +106,18 @@ impl Query {
         }
     }
 
+    /// Returns `true` if the query is resolving a future.
     pub fn is_fetching(&self) -> bool {
         self.inner.read().unwrap().future_or_value.peek().is_none()
     }
 
+    /// Return the last cache value of this query.
     pub fn last_value(&self) -> Option<Rc<dyn Any>> {
         self.inner.read().unwrap().last_value.clone()
     }
 
-    pub async fn fetch<T: 'static>(&mut self, retrier: Option<Retryer>) -> Result<Rc<T>, Error> {
+    /// Executes a future that resolves to a value.
+    pub async fn fetch<T: 'static>(&mut self) -> Result<Rc<T>, Error> {
         self.assert_type::<T>();
 
         // Only when is empty will be loading, otherwise may use the cache last value.
@@ -122,6 +129,7 @@ impl Query {
         let fut = {
             let mut inner = self.inner.write().expect("failed to write in query");
             let fetcher = inner.fetcher.clone();
+            let retrier = inner.retrier.clone();
             let fut = fetch_with_retry(fetcher, retrier.clone())
                 .boxed_local()
                 .shared();
@@ -141,33 +149,10 @@ impl Query {
             }
         };
 
+        // refetch
+        self.trigger_refetch::<T>();
+
         let mut inner = self.inner.write().expect("failed to write in query");
-
-        if let Some(refetch_time) = inner.refetch_time {
-            if let Some(interval) = inner.interval.take() {
-                interval.cancel();
-            };
-
-            let this = self.clone();
-            let retrier = retrier.clone();
-            let interval = Interval::new(refetch_time, move || {
-                let this = this.clone();
-                let retrier = retrier.clone();
-
-                spawn_local(async move {
-                    log::trace!("refetching...");
-
-                    let mut this = this.clone();
-                    if let Err(_) = this.fetch::<T>(retrier).await {
-                        // Nothing to do, if fail the query will update its inner state
-                    }
-
-                    log::trace!("refetch done");
-                });
-            });
-
-            inner.interval = Some(interval);
-        }
 
         let ret = value
             .downcast::<T>()
@@ -200,8 +185,9 @@ impl Query {
         }
     }
 
-    pub(crate) fn set_value(&mut self, value: Rc<dyn Any>) {
-        assert!(self.type_id == value.type_id());
+    /// Sets the value of this query.
+    pub fn set_value<T: 'static>(&mut self, value: T) {
+        self.assert_type::<T>();
 
         let fut = ready(Ok(Rc::new(value) as Rc<dyn Any>))
             .boxed_local()
@@ -209,12 +195,45 @@ impl Query {
 
         // SAFETY: Value always is Ok(T)
         let value = futures::executor::block_on(fut.clone()).unwrap();
-        debug_assert!(fut.peek().is_some());
 
         let mut inner = self.inner.write().expect("failed to write in query");
         inner.future_or_value = fut;
         inner.state = QueryState::Ready;
         inner.last_value = Some(value);
         inner.updated_at = Some(Instant::now());
+
+        // refetch
+        self.trigger_refetch::<T>();
+    }
+
+    fn trigger_refetch<T: 'static>(&self) {
+        let mut inner = self.inner.write().unwrap();
+
+        if let Some(refetch_time) = inner.refetch_time {
+            if let Some(interval) = inner.interval.take() {
+                interval.cancel();
+            };
+
+            drop(inner); // We don't need to hold the ownership anymore
+
+            let this = self.clone();
+            let interval = Interval::new(refetch_time, move || {
+                let this = this.clone();
+
+                spawn_local(async move {
+                    log::trace!("refetching...");
+
+                    let mut this = this.clone();
+                    if let Err(_) = this.fetch::<T>().await {
+                        // Nothing to do, if fail the query will update its inner state
+                    }
+
+                    log::trace!("refetch done");
+                });
+            });
+
+            let mut inner = self.inner.write().unwrap();
+            inner.interval = Some(interval);
+        }
     }
 }

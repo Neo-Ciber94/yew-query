@@ -1,4 +1,4 @@
-use std::{time::Duration, rc::Rc};
+use std::{fmt::Debug, rc::Rc, time::Duration};
 
 /// Represents an iterator over a duration.
 pub type Retry = Box<dyn Iterator<Item = Duration>>;
@@ -25,5 +25,11 @@ impl Retryer {
     /// Returns a `Retry` iterator.
     pub fn get(&self) -> Retry {
         (self.0)()
+    }
+}
+
+impl Debug for Retryer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Retryer")
     }
 }

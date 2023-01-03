@@ -1,13 +1,13 @@
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
+use futures::{
+    stream::{AbortHandle, Abortable},
+    StreamExt,
 };
 use instant::Duration;
 use prokio::spawn_local;
 
 #[derive(Debug, Clone)]
 pub struct Interval {
-    cancel: Arc<AtomicBool>,
+    cancel: AbortHandle,
 }
 
 impl Interval {
@@ -15,22 +15,17 @@ impl Interval {
     where
         F: Fn() + 'static,
     {
-        let cancel = Arc::new(AtomicBool::new(false));
+        let (cancel, registration) = AbortHandle::new_pair();
+        let stream = prokio::time::interval(duration);
+        let abortable_stream = Abortable::new(stream, registration).boxed_local();
 
-        {
-            let cancel = cancel.clone();
-            spawn_local(async move {
-                while !cancel.load(Ordering::SeqCst) {
-                    prokio::time::sleep(duration).await;
+        spawn_local(async move {
+            tokio::pin!(abortable_stream);
 
-                    if !cancel.load(Ordering::SeqCst) {
-                        f();
-                    } else {
-                        break;
-                    }
-                }
-            });
-        }
+            while let Some(_) = abortable_stream.next().await {
+                f();
+            }
+        });
 
         Interval { cancel }
     }
@@ -40,12 +35,7 @@ impl Interval {
     }
 
     fn clear_interval(&mut self) {
-        if let Err(_) =
-            self.cancel
-                .compare_exchange(false, true, Ordering::AcqRel, Ordering::Relaxed)
-        {
-            //
-        }
+        self.cancel.abort();
     }
 }
 
@@ -53,11 +43,4 @@ impl Drop for Interval {
     fn drop(&mut self) {
         self.clear_interval();
     }
-}
-
-pub fn run_interval<F>(duration: Duration, f: F) -> Interval
-where
-    F: Fn() + 'static,
-{
-    Interval::new(duration, f)
 }

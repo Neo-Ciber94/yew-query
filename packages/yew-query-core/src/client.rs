@@ -95,7 +95,7 @@ impl QueryClient {
         };
 
         // Await the value what will update the copy in the cache
-        let value = query.fetch::<T>(retrier).await?;
+        let value = query.fetch::<T>().await?;
 
         Ok(value)
     }
@@ -112,8 +112,7 @@ impl QueryClient {
             return Err(Error::new(QueryError::key_not_found(&key)));
         };
 
-        let retrier = self.retry.clone();
-        let ret = query.fetch(retrier).await?;
+        let ret = query.fetch().await?;
         Ok(ret)
     }
 
@@ -181,7 +180,7 @@ impl QueryClient {
                 //     return Err(QueryError::type_mismatch::<T>());
                 // }
 
-                query.set_value(Rc::new(value) as Rc<dyn Any>);
+                query.set_value(value);
             }
             None => {
                 return Err(QueryError::type_mismatch::<T>());
