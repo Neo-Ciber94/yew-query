@@ -1,6 +1,6 @@
 use std::{fmt::Debug, rc::Rc, time::Duration};
 
-/// Represents an iterator over a duration.
+/// Represents an iterator over a `Duration`.
 pub type Retry = Box<dyn Iterator<Item = Duration>>;
 
 /// Boxes a retry iterator.
