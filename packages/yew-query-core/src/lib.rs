@@ -1,11 +1,17 @@
-pub mod cache;
-pub mod client;
+mod cache;
+mod client;
+mod key;
+mod observer;
+mod query;
+mod state;
+
+pub use {cache::*, client::*, key::*, observer::*, query::*, state::*};
+
+//
 pub mod fetcher;
-pub mod key;
-pub mod observer;
-pub mod query;
 pub mod retry;
-pub mod state;
+
+//
 pub mod error;
 pub use error::Error;
 

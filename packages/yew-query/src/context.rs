@@ -1,5 +1,5 @@
 use yew::{function_component, Children, ContextProvider, Properties};
-use yew_query_core::client::QueryClient;
+use yew_query_core::QueryClient;
 
 /// A context with the `QueryClient`.
 pub struct QueryClientContext {

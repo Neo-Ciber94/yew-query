@@ -1,8 +1,7 @@
 use std::{convert::Infallible, io::ErrorKind, path::Path, time::Duration};
-
 use serde::{de::DeserializeOwned, Deserialize};
 use tokio::task::LocalSet;
-use yew_query_core::{client::QueryClient, key::QueryKey};
+use yew_query_core::{QueryClient, QueryKey};
 
 #[allow(dead_code)]
 #[derive(Debug, Deserialize)]
