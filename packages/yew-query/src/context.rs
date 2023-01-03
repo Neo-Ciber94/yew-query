@@ -2,7 +2,6 @@ use yew::{function_component, Children, ContextProvider, Properties};
 use yew_query_core::client::QueryClient;
 
 /// A context with the `QueryClient`.
-#[derive(PartialEq)]
 pub struct QueryClientContext {
     pub(crate) client: QueryClient,
 }
@@ -15,13 +14,25 @@ impl Clone for QueryClientContext {
     }
 }
 
+impl PartialEq for QueryClientContext {
+    fn eq(&self, other: &Self) -> bool {
+        eq_query_client(&self.client, &other.client)
+    }
+}
+
 /// Properties for a `QueryClientContext`.
-#[derive(Properties, PartialEq)]
+#[derive(Properties)]
 pub struct QueryClientContextProps {
     pub client: QueryClient,
 
     #[prop_or_default]
     pub children: Children,
+}
+
+impl PartialEq for QueryClientContextProps {
+    fn eq(&self, other: &Self) -> bool {
+        eq_query_client(&self.client, &other.client) && self.children == other.children
+    }
 }
 
 /// Declares a `QueryClient` for the app.
@@ -36,4 +47,8 @@ pub fn QueryClientProvider(props: &QueryClientContextProps) -> yew::Html {
             { for props.children.iter() }
         </ContextProvider<QueryClientContext>>
     }
+}
+
+fn eq_query_client(a: &QueryClient, b: &QueryClient) -> bool {
+    std::ptr::eq(a, b)
 }

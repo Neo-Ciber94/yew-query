@@ -8,7 +8,7 @@ use std::rc::Rc;
 use web_sys::AbortSignal;
 use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle};
 use yew_query_core::key::{QueryKey, Key};
-use yew_query_core::observer::QueryEvent;
+use yew_query_core::observer::QueryChangeEvent;
 use yew_query_core::{observer::QueryObserver, Error};
 
 /// Options for a `use_query`.
@@ -242,7 +242,7 @@ where
                         return;
                     }
 
-                    let QueryEvent {
+                    let QueryChangeEvent {
                         state,
                         value,
                         is_fetching,

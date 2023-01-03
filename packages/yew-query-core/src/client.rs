@@ -213,12 +213,6 @@ impl Debug for QueryClient {
     }
 }
 
-impl PartialEq for QueryClient {
-    fn eq(&self, other: &Self) -> bool {
-        Rc::ptr_eq(&self.cache, &other.cache)
-    }
-}
-
 /// A builder for creating a `QueryClient`.
 #[derive(Default)]
 pub struct QueryClientBuilder {

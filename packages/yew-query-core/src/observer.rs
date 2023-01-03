@@ -2,10 +2,15 @@ use futures::Future;
 use prokio::spawn_local;
 use std::{marker::PhantomData, rc::Rc};
 
-use crate::{client::QueryClient, key::{QueryKey, Key}, state::QueryState, Error};
+use crate::{
+    client::QueryClient,
+    key::{Key, QueryKey},
+    state::QueryState,
+    Error,
+};
 
 /// An event emitted when executing a query.
-pub struct QueryEvent<T> {
+pub struct QueryChangeEvent<T> {
     /// The state of a query.
     pub state: QueryState,
 
@@ -51,7 +56,7 @@ where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
         E: Into<Error> + 'static,
-        C: Fn(QueryEvent<T>) + 'static,
+        C: Fn(QueryChangeEvent<T>) + 'static,
     {
         let key = &self.key;
 
@@ -62,7 +67,7 @@ where
             let is_fetching = client.is_fetching(key);
 
             // Set initial state
-            callback(QueryEvent {
+            callback(QueryChangeEvent {
                 state,
                 is_fetching,
                 value: last_value,
@@ -77,12 +82,12 @@ where
             let ret = client.fetch_query(key, fetch).await;
 
             match ret {
-                Ok(value) => callback(QueryEvent {
+                Ok(value) => callback(QueryChangeEvent {
                     state: QueryState::Ready,
                     is_fetching: false,
                     value: Some(value),
                 }),
-                Err(err) => callback(QueryEvent {
+                Err(err) => callback(QueryChangeEvent {
                     state: QueryState::Failed(err.into()),
                     is_fetching: false,
                     value: None,
