@@ -2,7 +2,7 @@ use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retryer, 
 use crate::{fetcher::Fetch, key::QueryKey, state::QueryState};
 use std::{
     any::{Any, TypeId},
-    cell::RefCell,
+    cell::{Ref, RefCell},
     collections::HashMap,
     fmt::Debug,
     future::Future,
@@ -116,16 +116,36 @@ impl QueryClient {
         Ok(ret)
     }
 
-    /// Returns `true` if the given key exists in the cache.
+    /// Returns the query associated with the given key.
+    pub fn get_query(&self, key: &QueryKey) -> Option<Ref<'_, Query>> {
+        let cache = self.cache.borrow();
+        if !cache.has(key) {
+            return None;
+        }
+
+        let ret = Ref::map(cache, |x| &*x.get(key).unwrap());
+        Some(ret)
+    }
+
+    /// Returns `true` if there is a query associated with the given key.
     pub fn contains_query(&self, key: &QueryKey) -> bool {
         let cache = self.cache.borrow();
         return cache.has(key);
     }
 
-    /// Returns the query value associated with the given key.
+    /// Returns `true` if there is cached data associated with the given key.
+    pub fn has_query_data(&self, key: &QueryKey) -> bool {
+        self.get_query(key).map(|q| !q.is_stale()).unwrap_or(false)
+    }
+
+    /// Returns the cache query data associated with the given key.
     ///
-    /// # Remarks
-    /// This don't checks if the value is not stale.
+    /// # Returns
+    /// - `Ok(Rc(T))` if the data is fresh in cache.
+    /// - `Err(QueryError::KeyNotFound)` if there is not query associated with the given key.
+    /// - `Err(QueryError::StaleValue)` if the query exists but is stale.
+    /// - `Err(QueryError::TypeMismatch)` if the key don't match the given type or
+    /// if the query value cannot be converted to the given type.
     pub fn get_query_data<T: 'static>(&self, key: &QueryKey) -> Result<Rc<T>, QueryError> {
         if !key.is_type::<T>() {
             return Err(QueryError::type_mismatch::<T>());
@@ -134,7 +154,14 @@ impl QueryClient {
         let cache = self.cache.borrow();
         cache
             .get(key)
-            .ok_or(QueryError::NoCacheValue)
+            .ok_or_else(|| QueryError::key_not_found(key))
+            .and_then(|q| {
+                if q.is_stale() {
+                    Err(QueryError::StaleValue)
+                } else {
+                    Ok(q)
+                }
+            })
             .and_then(|query| {
                 query
                     .last_value()
@@ -151,7 +178,12 @@ impl QueryClient {
     /// - `Some(QueryState)`: with the state of the query.
     /// - `None`: if the query do not exists.
     pub fn get_query_state(&self, key: &QueryKey) -> Option<QueryState> {
-        self.cache.borrow().get(key).clone().map(|x| x.state())
+        self.cache
+            .borrow()
+            .get(key)
+            .filter(|q| !q.is_stale())
+            .clone()
+            .map(|x| x.state())
     }
 
     /// Sets cache value for given key.
@@ -301,4 +333,74 @@ where
     }
 
     ret
+}
+
+#[cfg(test)]
+mod tests {
+    use std::convert::Infallible;
+
+    use futures::Future;
+    use instant::Duration;
+    use tokio::task::LocalSet;
+
+    use crate::{error::QueryError, QueryClient, QueryKey};
+
+    #[tokio::test]
+    async fn fetch_and_cache_query_test() {
+        #[derive(Debug, PartialEq)]
+        struct Item {
+            name: String,
+        }
+
+        run_local(async {
+            let mut client = QueryClient::builder()
+                .cache_time(Duration::from_millis(400))
+                .build();
+
+            let key = QueryKey::of::<Item>("sword");
+
+            assert!(!client.contains_query(&key));
+
+            let ret = client
+                .fetch_query(key.clone(), || async {
+                    Ok::<_, Infallible>(Item {
+                        name: "Fire Sword".to_owned(),
+                    })
+                })
+                .await;
+
+            assert_eq!(
+                ret.ok().as_deref(),
+                Some(&Item {
+                    name: "Fire Sword".to_owned()
+                })
+            );
+
+            assert!(!client.is_stale(&key));
+            assert_eq!(
+                client.get_query_data::<Item>(&key).ok().as_deref(),
+                Some(&Item {
+                    name: "Fire Sword".to_owned()
+                })
+            );
+
+            // Let the data expire
+            tokio::time::sleep(Duration::from_millis(500)).await;
+
+            assert!(client.is_stale(&key));
+            assert!(matches!(
+                client.get_query_data::<Item>(&key),
+                Err(QueryError::StaleValue)
+            ));
+        })
+        .await;
+    }
+
+    async fn run_local<Fut>(future: Fut) -> Fut::Output
+    where
+        Fut: Future,
+    {
+        let local_set = LocalSet::new();
+        local_set.run_until(future).await
+    }
 }
