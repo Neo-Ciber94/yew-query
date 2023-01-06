@@ -42,7 +42,9 @@ where
 
 #[doc(hidden)]
 #[derive(Debug)]
-pub struct TypeMismatchError(&'static str);
+pub struct TypeMismatchError {
+    mismatch: &'static str,
+}
 
 #[doc(hidden)]
 #[derive(Debug)]
@@ -66,8 +68,8 @@ pub enum QueryError {
 
 impl QueryError {
     pub(crate) fn type_mismatch<T: 'static>() -> Self {
-        let ty = std::any::type_name::<T>();
-        QueryError::TypeMismatch(TypeMismatchError(ty))
+        let mismatch = std::any::type_name::<T>();
+        QueryError::TypeMismatch(TypeMismatchError { mismatch })
     }
 
     pub(crate) fn key_not_found(key: &QueryKey) -> Self {
@@ -82,7 +84,7 @@ impl Display for QueryError {
         use QueryError::*;
 
         match self {
-            TypeMismatch(TypeMismatchError(s)) => write!(f, "invalid type `{s}`"),
+            TypeMismatch(TypeMismatchError { mismatch }) => write!(f, "invalid type `{mismatch}`"),
             KeyNotFound(KeyNotFoundError(k)) => write!(f, "key not found `{k}`"),
             NotReady => write!(f, "query had not resolved yet"),
             StaleValue => write!(f, "value is tale"),

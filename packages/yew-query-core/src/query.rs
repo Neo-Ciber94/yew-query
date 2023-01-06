@@ -159,7 +159,7 @@ impl Query {
         };
 
         // refetch
-        self.trigger_refetch::<T>();
+        self.queue_refetch::<T>();
 
         let mut inner = self.inner.write().expect("failed to write in query");
 
@@ -214,11 +214,11 @@ impl Query {
         }
 
         // refetch
-        self.trigger_refetch::<T>();
+        self.queue_refetch::<T>();
         Ok(())
     }
 
-    fn trigger_refetch<T: 'static>(&self) {
+    fn queue_refetch<T: 'static>(&self) {
         let mut inner = self.inner.write().unwrap();
 
         if let Some(refetch_time) = inner.refetch_time {
