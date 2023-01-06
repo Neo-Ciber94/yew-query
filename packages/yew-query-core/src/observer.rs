@@ -56,6 +56,7 @@ where
         value
     }
 
+    /// Returns the last state.
     pub fn get_last_state(&self) -> Option<QueryState> {
         let key = &self.key;
         let state = self.client.get_query(key).map(|q| q.state());
