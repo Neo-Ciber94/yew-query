@@ -71,8 +71,17 @@ impl Query {
         Query { type_id, inner }
     }
 
-    fn assert_type<T: 'static>(&self) {
-        assert!(self.type_id == TypeId::of::<T>(), "type mismatch");
+    fn assert_type<T: 'static>(&self) -> Result<(), QueryError> {
+        if self.type_id != TypeId::of::<T>() {
+            return Err(QueryError::type_mismatch::<T>());
+        }
+
+        Ok(())
+    }
+
+    /// Returns the type if of this `Query`.
+    pub fn type_id(&self) -> TypeId {
+        self.type_id
     }
 
     /// Returns the state of this query.
@@ -118,7 +127,7 @@ impl Query {
 
     /// Executes a future that resolves to a value.
     pub async fn fetch<T: 'static>(&mut self) -> Result<Rc<T>, Error> {
-        self.assert_type::<T>();
+        self.assert_type::<T>()?;
 
         // Only when is empty will be loading, otherwise may use the cache last value.
         if self.last_value().is_none() {
@@ -186,8 +195,8 @@ impl Query {
     }
 
     /// Sets the value of this query.
-    pub fn set_value<T: 'static>(&mut self, value: T) {
-        self.assert_type::<T>();
+    pub fn set_value<T: 'static>(&mut self, value: T) -> Result<(), QueryError> {
+        self.assert_type::<T>()?;
 
         let fut = ready(Ok(Rc::new(value) as Rc<dyn Any>))
             .boxed_local()
@@ -196,14 +205,17 @@ impl Query {
         // SAFETY: Value always is Ok(T)
         let value = futures::executor::block_on(fut.clone()).unwrap();
 
-        let mut inner = self.inner.write().expect("failed to write in query");
-        inner.future_or_value = fut;
-        inner.state = QueryState::Ready;
-        inner.last_value = Some(value);
-        inner.updated_at = Some(Instant::now());
+        {
+            let mut inner = self.inner.write().expect("failed to write in query");
+            inner.future_or_value = fut;
+            inner.state = QueryState::Ready;
+            inner.last_value = Some(value);
+            inner.updated_at = Some(Instant::now());
+        }
 
         // refetch
         self.trigger_refetch::<T>();
+        Ok(())
     }
 
     fn trigger_refetch<T: 'static>(&self) {

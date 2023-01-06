@@ -1,7 +1,7 @@
 use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retryer, Error};
 use crate::{fetcher::Fetch, key::QueryKey, state::QueryState};
 use std::{
-    any::{Any, TypeId},
+    any::TypeId,
     cell::{Ref, RefCell},
     collections::HashMap,
     fmt::Debug,
@@ -212,10 +212,10 @@ impl QueryClient {
                 //     return Err(QueryError::type_mismatch::<T>());
                 // }
 
-                query.set_value(value);
+                query.set_value(value)?;
             }
             None => {
-                return Err(QueryError::type_mismatch::<T>());
+                return Err(QueryError::key_not_found(&key));
             }
         }
 
@@ -301,9 +301,9 @@ impl QueryClientBuilder {
     /// Returns the `QueryClient` using this builder options.
     pub fn build(self) -> QueryClient {
         let Self {
-            cache_time: stale_time,
-            retry,
             cache,
+            retry,
+            cache_time,
             refetch_time,
         } = self;
 
@@ -313,7 +313,7 @@ impl QueryClientBuilder {
 
         QueryClient {
             cache,
-            cache_time: stale_time,
+            cache_time,
             refetch_time,
             retry,
         }
@@ -374,13 +374,14 @@ mod tests {
                         name: "Fire Sword".to_owned(),
                     })
                 })
-                .await;
+                .await
+                .unwrap();
 
             assert_eq!(
-                ret.ok().as_deref(),
-                Some(&Item {
+                ret.as_ref(),
+                &Item {
                     name: "Fire Sword".to_owned()
-                })
+                }
             );
 
             assert!(!client.is_stale(&key));
@@ -399,6 +400,162 @@ mod tests {
                 client.get_query_data::<Item>(&key),
                 Err(QueryError::StaleValue)
             ));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn refetch_and_cache_query_test() {
+        run_local(async {
+            let mut client = QueryClient::builder()
+                .cache_time(Duration::from_millis(200))
+                .build();
+
+            let key = QueryKey::of::<String>("color");
+            let value = client
+                .fetch_query(key.clone(), || async {
+                    Ok::<_, Infallible>("magenta".to_owned())
+                })
+                .await
+                .unwrap();
+
+            assert!(client.has_query_data(&key));
+            assert_eq!(value.as_str(), "magenta");
+
+            // Wait for timeout
+            tokio::time::sleep(Duration::from_millis(300)).await;
+
+            // Expired
+            assert!(!client.has_query_data(&key));
+
+            // Refetch
+            let value = client.refetch_query::<String>(key.clone()).await.unwrap();
+            assert!(client.has_query_data(&key));
+            assert_eq!(value.as_str(), "magenta");
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn set_and_get_query_data_test() {
+        run_local(async {
+            let mut client = QueryClient::builder()
+                .cache_time(Duration::from_millis(200))
+                .build();
+
+            let key = QueryKey::of::<String>("color");
+            client
+                .fetch_query(key.clone(), || async {
+                    Ok::<_, Infallible>("pink".to_owned())
+                })
+                .await
+                .unwrap();
+
+            assert_eq!(
+                client.get_query_data(&key).ok().as_deref(),
+                Some(&String::from("pink"))
+            );
+
+            assert!(client.has_query_data(&key));
+
+            // Wait for timeout
+            tokio::time::sleep(Duration::from_millis(300)).await;
+
+            assert!(!client.has_query_data(&key));
+
+            // Sets the data
+            client
+                .set_query_data(key.clone(), String::from("aqua"))
+                .unwrap();
+
+            assert_eq!(
+                client.get_query_data(&key).ok().as_deref(),
+                Some(&String::from("aqua"))
+            );
+
+            // Wait for timeout
+            tokio::time::sleep(Duration::from_millis(300)).await;
+
+            assert!(matches!(
+                client.get_query_data::<String>(&key),
+                Err(QueryError::StaleValue)
+            ));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn contains_and_get_query_then_remove_test() {
+        run_local(async {
+            let mut client = QueryClient::builder()
+                .cache_time(Duration::from_millis(200))
+                .build();
+
+            let key = QueryKey::of::<String>("fruit");
+
+            assert!(!client.contains_query(&key));
+            assert!(client.get_query(&key).is_none());
+            assert!(!client.has_query_data(&key));
+
+            client
+                .fetch_query(key.clone(), || async {
+                    Ok::<_, Infallible>("strawberry".to_owned())
+                })
+                .await
+                .unwrap();
+
+            assert!(client.contains_query(&key));
+            assert!(client.get_query(&key).is_some());
+            assert!(client.has_query_data(&key));
+
+            // Wait for timeout
+            tokio::time::sleep(Duration::from_millis(300)).await;
+
+            assert!(client.contains_query(&key));
+            assert!(client.get_query(&key).is_some());
+            assert!(!client.has_query_data(&key));
+
+            // Remove the query
+            client.remove_query_data(&key);
+
+            assert!(!client.contains_query(&key));
+            assert!(client.get_query(&key).is_none());
+            assert!(!client.has_query_data(&key));
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn clear_queries_test() {
+        run_local(async {
+            let mut client = QueryClient::builder()
+                .cache_time(Duration::from_millis(200))
+                .build();
+
+            let fruit_key = QueryKey::of::<String>("fruit");
+            let color_key = QueryKey::of::<String>("color");
+
+            client
+                .fetch_query(fruit_key.clone(), || async {
+                    Ok::<_, Infallible>("apple".to_owned())
+                })
+                .await
+                .unwrap();
+
+            client
+                .fetch_query(color_key.clone(), || async {
+                    Ok::<_, Infallible>("red".to_owned())
+                })
+                .await
+                .unwrap();
+
+            assert!(client.contains_query(&fruit_key));
+            assert!(client.contains_query(&color_key));
+
+            client.clear_queries();
+
+            assert!(!client.contains_query(&fruit_key));
+            assert!(!client.contains_query(&color_key));
         })
         .await;
     }
