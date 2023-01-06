@@ -201,7 +201,11 @@ where
     let first_render = use_is_first_render();
     let query_key = QueryKey::of::<T>(key.clone());
     let query_fetching = use_state(|| false);
-    let query_state = use_state(|| QueryState::Idle);
+    
+    let query_state = {
+        let last_state = observer.get_last_state();
+        use_state(|| last_state.unwrap_or(QueryState::Idle))
+    };
     let query_value = {
         let last_value = observer.get_last_value();
         use_state(move || last_value)

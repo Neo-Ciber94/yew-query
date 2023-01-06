@@ -46,8 +46,20 @@ where
     /// Returns the last value emitted.
     pub fn get_last_value(&self) -> Option<Rc<T>> {
         let key = &self.key;
-        let value = self.client.get_query_data(key);
-        value.ok()
+        let value = self
+            .client
+            .get_query(key)
+            .and_then(|x| x.last_value())
+            .clone()
+            .and_then(|x| x.downcast::<T>().ok());
+
+        value
+    }
+
+    pub fn get_last_state(&self) -> Option<QueryState> {
+        let key = &self.key;
+        let state = self.client.get_query(key).map(|q| q.state());
+        state
     }
 
     /// Adds a callback for observing the given query.
@@ -79,6 +91,16 @@ where
 
         spawn_local(async move {
             let mut client = client;
+
+            // If the query don't exists we are loading
+            if !client.contains_query(&key) {
+                callback(QueryChangeEvent {
+                    state: QueryState::Loading,
+                    is_fetching: true,
+                    value: None,
+                });
+            }
+
             let ret = client.fetch_query(key, fetch).await;
 
             match ret {
