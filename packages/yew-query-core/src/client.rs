@@ -239,8 +239,15 @@ impl Debug for QueryClient {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("QueryClient")
             .field("cache", &self.cache)
-            .field("stale_time", &self.cache_time)
-            .field("retry", &"Retryer")
+            .field("cache_time", &self.cache_time)
+            .field("refetch_time", &self.refetch_time)
+            .field("retry", {
+                if self.retry.is_none() {
+                    &"None"
+                } else {
+                    &"Some(Retryer)"
+                }
+            })
             .finish()
     }
 }
