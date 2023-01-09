@@ -244,3 +244,12 @@ impl Query {
         }
     }
 }
+
+impl Drop for Query {
+    fn drop(&mut self) {
+        let mut inner = self.inner.write().unwrap();
+        if let Some(interval) = inner.interval.take() {
+            interval.cancel();
+        }
+    }
+}
