@@ -1,5 +1,5 @@
 use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retryer, Error};
-use crate::{fetcher::Fetch, key::QueryKey, state::QueryState};
+use crate::{fetcher::Fetch, key::QueryKey, state::QueryState, QueryOptions};
 use std::{
     any::TypeId,
     cell::{Ref, RefCell},
@@ -11,12 +11,10 @@ use std::{
 };
 
 /// Mechanism used for fetching and caching queries.
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct QueryClient {
     cache: Rc<RefCell<dyn QueryCache>>,
-    cache_time: Option<Duration>,
-    refetch_time: Option<Duration>,
-    retry: Option<Retryer>,
+    options: QueryOptions,
 }
 
 impl QueryClient {
@@ -72,8 +70,8 @@ impl QueryClient {
             }
         }
 
-        let can_cache = self.cache_time.is_some();
-        let retrier = self.retry.clone();
+        let can_cache = self.options.cache_time.is_some();
+        let retrier = self.options.retry.clone();
 
         // Only store the result in the cache if had stale time
         if !can_cache {
@@ -86,7 +84,13 @@ impl QueryClient {
             match cache.get(&key).cloned() {
                 Some(x) => x,
                 None => {
-                    let query = Query::new(f, retrier.clone(), self.cache_time, self.refetch_time);
+                    let QueryOptions {
+                        cache_time,
+                        refetch_time,
+                        ..
+                    } = &self.options;
+
+                    let query = Query::new(f, retrier.clone(), *cache_time, *refetch_time);
                     cache.set(key.clone(), query.clone());
 
                     query
@@ -235,30 +239,11 @@ impl QueryClient {
     }
 }
 
-impl Debug for QueryClient {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("QueryClient")
-            .field("cache", &self.cache)
-            .field("cache_time", &self.cache_time)
-            .field("refetch_time", &self.refetch_time)
-            .field("retry", {
-                if self.retry.is_none() {
-                    &"None"
-                } else {
-                    &"Some(Retryer)"
-                }
-            })
-            .finish()
-    }
-}
-
 /// A builder for creating a `QueryClient`.
 #[derive(Default)]
 pub struct QueryClientBuilder {
     cache: Option<Rc<RefCell<dyn QueryCache>>>,
-    cache_time: Option<Duration>,
-    refetch_time: Option<Duration>,
-    retry: Option<Retryer>,
+    options: QueryOptions,
 }
 
 impl QueryClientBuilder {
@@ -269,13 +254,13 @@ impl QueryClientBuilder {
 
     /// Sets the time a query can be reused from cache.
     pub fn cache_time(mut self, cache_time: Duration) -> Self {
-        self.cache_time = Some(cache_time);
+        self.options = self.options.cache_time(cache_time);
         self
     }
 
     /// Sets the interval at which the data will be refetched.
     pub fn refetch_time(mut self, refetch_time: Duration) -> Self {
-        self.refetch_time = Some(refetch_time);
+        self.options = self.options.refetch_time(refetch_time);
         self
     }
 
@@ -285,7 +270,7 @@ impl QueryClientBuilder {
         R: Fn() -> I + 'static,
         I: Iterator<Item = Duration> + 'static,
     {
-        self.retry = Some(Retryer::new(retry));
+        self.options = self.options.retry(retry);
         self
     }
 
@@ -300,23 +285,13 @@ impl QueryClientBuilder {
 
     /// Returns the `QueryClient` using this builder options.
     pub fn build(self) -> QueryClient {
-        let Self {
-            cache,
-            retry,
-            cache_time,
-            refetch_time,
-        } = self;
+        let Self { cache, options } = self;
 
         let cache = cache
             .or_else(|| Some(Rc::new(RefCell::new(HashMap::new()))))
             .unwrap();
 
-        QueryClient {
-            cache,
-            cache_time,
-            refetch_time,
-            retry,
-        }
+        QueryClient { cache, options }
     }
 }
 

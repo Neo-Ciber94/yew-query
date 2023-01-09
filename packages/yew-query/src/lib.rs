@@ -6,5 +6,5 @@ pub use hooks::*;
 
 pub use yew_query_core::*;
 
-#[doc(hidden)]
-pub mod listener;
+#[allow(dead_code)]
+pub(crate) mod listener;
