@@ -1,6 +1,6 @@
 use super::{error::QueryError, fetcher::BoxFetcher};
 use crate::{
-    client::fetch_with_retry, retry::Retryer, state::QueryState, time::interval::Interval, Error,
+    client::fetch_with_retry, retry::Retry, state::QueryState, time::interval::Interval, Error,
 };
 use futures::{
     future::{ready, LocalBoxFuture, Shared},
@@ -19,7 +19,7 @@ use std::{
 #[derive(Debug)]
 struct Inner {
     fetcher: BoxFetcher<Rc<dyn Any>>,
-    retrier: Option<Retryer>,
+    retrier: Option<Retry>,
     cache_time: Option<Duration>,
     refetch_time: Option<Duration>,
     updated_at: Option<Instant>,
@@ -40,7 +40,7 @@ impl Query {
     /// Constructs a new `Query`
     pub fn new<F, Fut, T, E>(
         f: F,
-        retrier: Option<Retryer>,
+        retrier: Option<Retry>,
         cache_time: Option<Duration>,
         refetch_time: Option<Duration>,
     ) -> Self

@@ -1,13 +1,13 @@
 use instant::Duration;
 
-use crate::retry::Retryer;
+use crate::retry::Retry;
 
 /// Options for a query.
 #[derive(Default, Debug, Clone)]
 pub struct QueryOptions {
     pub(crate) cache_time: Option<Duration>,
     pub(crate) refetch_time: Option<Duration>,
-    pub(crate) retry: Option<Retryer>,
+    pub(crate) retry: Option<Retry>,
 }
 
 impl QueryOptions {
@@ -34,7 +34,7 @@ impl QueryOptions {
         F: Fn() -> I + 'static,
         I: Iterator<Item = Duration> + 'static,
     {
-        self.retry = Some(Retryer::new(retry));
+        self.retry = Some(Retry::new(retry));
         self
     }
 

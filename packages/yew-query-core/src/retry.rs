@@ -1,13 +1,13 @@
 use std::{fmt::Debug, rc::Rc, time::Duration};
 
-type Retry = Box<dyn Iterator<Item = Duration>>;
+type DurationIterator = Box<dyn Iterator<Item = Duration>>;
 
 /// Boxes a retry iterator.
 #[derive(Clone)]
-pub struct Retryer(Rc<dyn Fn() -> Retry>);
+pub struct Retry(Rc<dyn Fn() -> DurationIterator>);
 
-impl Retryer {
-    /// Constructs a new `Retryer`.
+impl Retry {
+    /// Constructs a new `Retry`.
     pub fn new<F, I>(f: F) -> Self
     where
         F: Fn() -> I + 'static,
@@ -15,10 +15,10 @@ impl Retryer {
     {
         let f = Rc::new(move || {
             let retry = f();
-            Box::new(retry) as Retry
+            Box::new(retry) as DurationIterator
         });
 
-        Retryer(f)
+        Retry(f)
     }
 
     /// Returns an iterator over a duration used for retrying an operation.
@@ -27,8 +27,8 @@ impl Retryer {
     }
 }
 
-impl Debug for Retryer {
+impl Debug for Retry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Retryer")
+        write!(f, "Retry")
     }
 }

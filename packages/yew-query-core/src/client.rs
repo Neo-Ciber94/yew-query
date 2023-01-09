@@ -1,4 +1,4 @@
-use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retryer, Error};
+use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retry, Error};
 use crate::{fetcher::Fetch, key::QueryKey, state::QueryState, QueryOptions};
 use std::{
     any::TypeId,
@@ -312,7 +312,7 @@ impl QueryClientBuilder {
     }
 }
 
-pub(crate) async fn fetch_with_retry<F, T>(fetcher: F, retrier: Option<Retryer>) -> Result<T, Error>
+pub(crate) async fn fetch_with_retry<F, T>(fetcher: F, retrier: Option<Retry>) -> Result<T, Error>
 where
     F: Fetch<T> + 'static,
     T: 'static,
