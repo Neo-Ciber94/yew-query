@@ -560,6 +560,33 @@ mod tests {
         .await;
     }
 
+    #[tokio::test]
+    async fn query_with_refetch_test() {
+        run_local(async {
+            let mut client = QueryClient::builder()
+                .cache_time(Duration::from_millis(300))
+                .refetch_time(Duration::from_millis(400))
+                .build();
+
+            let key = QueryKey::of::<String>("fruit");
+            client
+                .fetch_query(key.clone(), || async { Ok::<_, Infallible>("pineapple") })
+                .await
+                .unwrap();
+
+            assert!(client.has_query_data(&key));
+
+            // Timeout
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            assert!(!client.has_query_data(&key));
+
+            // Wait for refetch
+            tokio::time::sleep(Duration::from_millis(600)).await;
+            assert!(client.has_query_data(&key));
+        })
+        .await
+    }
+
     async fn run_local<Fut>(future: Fut) -> Fut::Output
     where
         Fut: Future,

@@ -233,14 +233,14 @@ impl Query {
                 let this = this.clone();
 
                 spawn_local(async move {
-                    log::trace!("refetching...");
+                    println!("refetching...");
 
                     let mut this = this.clone();
                     if let Err(_) = this.fetch::<T>().await {
                         // Nothing to do, if fail the query will update its inner state
                     }
 
-                    log::trace!("refetch done");
+                    println!("refetch done");
                 });
             });
 
