@@ -301,7 +301,9 @@ where
         let client = client.clone();
         let query_key = query_key.clone();
 
-        // FIXME: We could require to prevent set the data of the ongoing query, if any
+        // Updates the id to prevent update the state
+        let self_id = latest_id.get().wrapping_add(1);
+        (*latest_id).set(self_id);
 
         use_callback(
             move |(), (key,)| {
