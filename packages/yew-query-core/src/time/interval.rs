@@ -29,7 +29,6 @@ mod abortable {
                 tokio::pin!(abortable);
 
                 while let Some(_) = abortable.next().await {
-                    println!("aborted: {}", abortable.is_aborted());
                     if !abortable.is_aborted() {
                         f();
                     }
@@ -101,8 +100,6 @@ mod atomic {
             self.cancel
                 .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
                 .ok();
-
-            log::trace!("abort");
         }
     }
 
