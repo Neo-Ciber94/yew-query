@@ -41,8 +41,24 @@ impl QueryClient {
         }
     }
 
-    /// Executes the future, cache and returns the result.
+    /// Executes the future then cache and returns the result.
     pub async fn fetch_query<F, Fut, T, E>(&mut self, key: QueryKey, f: F) -> Result<Rc<T>, Error>
+    where
+        F: Fn() -> Fut + 'static,
+        Fut: Future<Output = Result<T, E>> + 'static,
+        T: 'static,
+        E: Into<Error> + 'static,
+    {
+        self.fetch_query_with_options(key, f, None).await
+    }
+
+    /// Executes the future with the given `QueryOptions` then cache and returns the result.
+    pub async fn fetch_query_with_options<F, Fut, T, E>(
+        &mut self,
+        key: QueryKey,
+        f: F,
+        options: Option<&QueryOptions>,
+    ) -> Result<Rc<T>, Error>
     where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
@@ -70,8 +86,23 @@ impl QueryClient {
             }
         }
 
-        let can_cache = self.options.cache_time.is_some();
-        let retrier = self.options.retry.clone();
+        // Options
+        let cache_time = self
+            .options
+            .cache_time
+            .or(options.as_ref().and_then(|x| x.cache_time));
+        let refetch_time = self
+            .options
+            .refetch_time
+            .or(options.as_ref().and_then(|x| x.refetch_time));
+        let retry = self
+            .options
+            .retry
+            .clone()
+            .or_else(|| options.as_ref().and_then(|x| x.retry.clone()));
+
+        let can_cache = cache_time.is_some();
+        let retrier = retry.clone();
 
         // Only store the result in the cache if had stale time
         if !can_cache {
@@ -84,13 +115,7 @@ impl QueryClient {
             match cache.get(&key).cloned() {
                 Some(x) => x,
                 None => {
-                    let QueryOptions {
-                        cache_time,
-                        refetch_time,
-                        ..
-                    } = &self.options;
-
-                    let query = Query::new(f, retrier.clone(), *cache_time, *refetch_time);
+                    let query = Query::new(f, retrier.clone(), cache_time, refetch_time);
                     cache.set(key.clone(), query.clone());
 
                     query
@@ -202,19 +227,11 @@ impl QueryClient {
 
         let mut cache = self.cache.borrow_mut();
 
-        // This check should be done in the commented code below but the borrow checker doesn't allow it
-        if let Some(query) = cache.get(&key) {
-            if query.type_id() != TypeId::of::<T>() {
-                return Err(QueryError::type_mismatch::<T>());
-            }
-        }
-
         match cache.get_mut(&key) {
             Some(query) => {
-                // For some reason the borrow checker complains about this
-                // if query.type_id() != TypeId::of::<T>() {
-                //     return Err(QueryError::type_mismatch::<T>());
-                // }
+                if query.type_id() != TypeId::of::<T>() {
+                    return Err(QueryError::type_mismatch::<T>());
+                }
 
                 query.set_value(value)?;
             }

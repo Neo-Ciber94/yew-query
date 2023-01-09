@@ -37,4 +37,12 @@ impl QueryOptions {
         self.retry = Some(Retryer::new(retry));
         self
     }
+
+    pub fn merge(&self, other: Self) -> Self {
+        QueryOptions {
+            cache_time: self.cache_time.or(other.cache_time),
+            refetch_time: self.refetch_time.or(other.refetch_time),
+            retry: self.retry.clone().or_else(|| other.retry.clone()),
+        }
+    }
 }
