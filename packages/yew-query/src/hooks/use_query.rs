@@ -234,14 +234,19 @@ where
     let observer = QueryObserver::<T>::with_options(client.clone(), key.clone(), options);
     let first_render = use_is_first_render();
     let query_key = QueryKey::of::<T>(key.clone());
-    let query_fetching = use_state(|| false);
+
+    let query_fetching = {
+        let is_fetching = observer.is_fetching();
+        use_state(|| is_fetching)
+    };
 
     let query_state = {
-        let last_state = observer.get_last_state();
+        let last_state = observer.last_state();
         use_state(|| last_state.unwrap_or(QueryState::Idle))
     };
+
     let query_value = {
-        let last_value = observer.get_last_value();
+        let last_value = observer.last_value();
         use_state(move || last_value)
     };
 
@@ -301,13 +306,14 @@ where
         let client = client.clone();
         let query_key = query_key.clone();
 
-        // Updates the id to prevent update the state
-        let self_id = latest_id.get().wrapping_add(1);
-        (*latest_id).set(self_id);
-
         use_callback(
             move |(), (key,)| {
                 let mut client = client.clone();
+
+                // Updates the id to prevent update the state
+                let self_id = latest_id.get().wrapping_add(1);
+                (*latest_id).set(self_id);
+
                 client.remove_query_data(key);
                 query_state.set(QueryState::Idle);
                 query_value.set(None);

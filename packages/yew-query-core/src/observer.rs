@@ -50,8 +50,14 @@ where
         }
     }
 
+    /// Returns true if is fetching.
+    pub fn is_fetching(&self) -> bool {
+        let key = &self.key;
+        self.client.is_fetching(key)
+    }
+
     /// Returns the last value emitted.
-    pub fn get_last_value(&self) -> Option<Rc<T>> {
+    pub fn last_value(&self) -> Option<Rc<T>> {
         let key = &self.key;
         let value = self
             .client
@@ -64,7 +70,7 @@ where
     }
 
     /// Returns the last state.
-    pub fn get_last_state(&self) -> Option<QueryState> {
+    pub fn last_state(&self) -> Option<QueryState> {
         let key = &self.key;
         let state = self.client.get_query(key).map(|q| q.state());
         state
@@ -83,7 +89,7 @@ where
         {
             let client = self.client.clone();
             let state = client.get_query_state(key).unwrap_or(QueryState::Idle);
-            let last_value = self.get_last_value();
+            let last_value = self.last_value();
             let is_fetching = client.is_fetching(key);
 
             // Set initial state
