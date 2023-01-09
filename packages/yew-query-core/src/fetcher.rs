@@ -77,7 +77,7 @@ where
 }
 
 #[allow(dead_code)]
-struct InfiniteFetcher<T>(Box<dyn Fn(usize) -> TryBoxFuture<T>>);
+struct InfiniteFetcher<T>(Rc<dyn Fn(usize) -> TryBoxFuture<T>>);
 
 #[allow(dead_code)]
 impl<T> InfiniteFetcher<T> {
@@ -87,7 +87,7 @@ impl<T> InfiniteFetcher<T> {
         Fut: Future<Output = Result<T, E>> + 'static,
         E: Into<Error> + 'static,
     {
-        let f = Box::new(move |param| {
+        let f = Rc::new(move |param| {
             let fut = fetcher(param);
             Box::pin(async move {
                 match fut.await {

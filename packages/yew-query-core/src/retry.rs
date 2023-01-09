@@ -32,3 +32,32 @@ impl Debug for Retry {
         write!(f, "Retry")
     }
 }
+
+impl IntoIterator for Retry {
+    type Item = Duration;
+    type IntoIter = Box<dyn Iterator<Item = Duration>>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        (self.0)()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use super::Retry;
+
+    #[test]
+    fn retry_sleep_test() {
+        let retry = Retry::new(move || std::iter::repeat(Duration::from_millis(100)).take(3));
+        let start = Instant::now();
+        
+        for t in retry {
+            std::thread::sleep(t);
+        }
+
+        let dur = Instant::now() - start;
+        assert!(dur >= Duration::from_millis(300), "duration: {:?}", dur);
+    }
+}
