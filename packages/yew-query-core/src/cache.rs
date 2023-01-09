@@ -113,3 +113,94 @@ impl QueryCache for Vec<(QueryKey, Query)> {
         self.clear();
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        collections::{BTreeMap, HashMap},
+        convert::Infallible,
+    };
+
+    use crate::{Query, QueryCache, QueryKey};
+
+    #[test]
+    fn hash_map_cache_test() {
+        test_cache_impl(|| HashMap::new());
+    }
+
+    #[test]
+    fn tree_map_cache_test() {
+        test_cache_impl(|| BTreeMap::new());
+    }
+
+    #[test]
+    fn vec_cache_test() {
+        test_cache_impl(|| Vec::new());
+    }
+
+    fn test_cache_impl<F, Q>(factory: F)
+    where
+        F: FnOnce() -> Q,
+        Q: QueryCache,
+    {
+        let mut cache = factory();
+        cache.set(
+            QueryKey::of::<String>("color"),
+            Query::new(
+                || async { Ok::<_, Infallible>("red".to_owned()) },
+                None,
+                None,
+                None,
+            ),
+        );
+
+        cache.set(
+            QueryKey::of::<String>("fruit"),
+            Query::new(
+                || async { Ok::<_, Infallible>("apple".to_owned()) },
+                None,
+                None,
+                None,
+            ),
+        );
+
+        cache.set(
+            QueryKey::of::<i32>("number"),
+            Query::new(|| async { Ok::<_, Infallible>(12_i32) }, None, None, None),
+        );
+
+        assert!(cache.has(&QueryKey::of::<String>("color")));
+        assert!(cache.has(&QueryKey::of::<String>("fruit")));
+        assert!(!cache.has(&QueryKey::of::<String>("number")));
+
+        assert!(cache.get(&QueryKey::of::<String>("color")).is_some());
+        assert!(cache.get(&QueryKey::of::<String>("fruit")).is_some());
+        assert!(cache.get(&QueryKey::of::<i32>("number")).is_some());
+        assert!(cache.get(&QueryKey::of::<Vec<u32>>("number")).is_none());
+
+        cache.set(
+            QueryKey::of::<Vec<u32>>("number"),
+            Query::new(
+                || async { Ok::<_, Infallible>(vec![1, 2, 3]) },
+                None,
+                None,
+                None,
+            ),
+        );
+
+        assert!(cache.get_mut(&QueryKey::of::<String>("color")).is_some());
+        assert!(cache.get_mut(&QueryKey::of::<String>("fruit")).is_some());
+        assert!(cache.get_mut(&QueryKey::of::<i32>("number")).is_some());
+        assert!(cache.get(&QueryKey::of::<Vec<u32>>("number")).is_some());
+
+        cache.remove(&QueryKey::of::<i32>("number"));
+        assert!(cache.get_mut(&QueryKey::of::<i32>("number")).is_none());
+
+        cache.clear();
+
+        assert!(cache.get(&QueryKey::of::<String>("color")).is_none());
+        assert!(cache.get(&QueryKey::of::<String>("fruit")).is_none());
+        assert!(cache.get(&QueryKey::of::<i32>("number")).is_none());
+        assert!(cache.get(&QueryKey::of::<Vec<u32>>("number")).is_none());
+    }
+}
