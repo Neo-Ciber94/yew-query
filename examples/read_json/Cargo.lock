@@ -890,7 +890,6 @@ version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "instant",
- "log",
  "prokio",
  "tokio",
  "wasm-bindgen",
