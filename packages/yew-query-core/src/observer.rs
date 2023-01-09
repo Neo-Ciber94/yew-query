@@ -6,7 +6,7 @@ use crate::{
     client::QueryClient,
     key::{Key, QueryKey},
     state::QueryState,
-    Error,
+    Error, QueryOptions,
 };
 
 /// An event emitted when executing a query.
@@ -24,6 +24,7 @@ pub struct QueryChangeEvent<T> {
 /// A mechanism for track the state of a query.
 pub struct QueryObserver<T> {
     client: QueryClient,
+    options: Option<QueryOptions>,
     key: QueryKey,
     _marker: PhantomData<T>,
 }
@@ -34,11 +35,17 @@ where
 {
     /// Constructs a new observer for the given key.
     pub fn new(client: QueryClient, key: Key) -> Self {
+        Self::with_options(client, key, None)
+    }
+
+    /// Constructs a new observer for the given key and `QueryOptions`.
+    pub fn with_options(client: QueryClient, key: Key, options: Option<QueryOptions>) -> Self {
         let key = QueryKey::of::<T>(key);
 
         QueryObserver {
             client,
             key,
+            options,
             _marker: PhantomData,
         }
     }
@@ -89,6 +96,7 @@ where
 
         let key = key.clone();
         let client = self.client.clone();
+        let options = self.options.clone();
 
         spawn_local(async move {
             let mut client = client;
@@ -102,7 +110,9 @@ where
                 });
             }
 
-            let ret = client.fetch_query(key, fetch).await;
+            let ret = client
+                .fetch_query_with_options(key, fetch, options.as_ref())
+                .await;
 
             match ret {
                 Ok(value) => callback(QueryChangeEvent {

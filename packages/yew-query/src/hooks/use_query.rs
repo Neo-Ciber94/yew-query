@@ -1,12 +1,16 @@
 use super::use_query_client;
-use crate::common::{
-    use_abort_controller, use_is_first_render, use_on_online, use_on_window_focus,
+use crate::{
+    common::{use_abort_controller, use_is_first_render, use_on_online, use_on_window_focus},
+    utils::OptionExt,
 };
 use futures::Future;
+use instant::Duration;
 use std::rc::Rc;
 use web_sys::AbortSignal;
 use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle};
-use yew_query_core::{Error, Key, QueryChangeEvent, QueryKey, QueryObserver, QueryState};
+use yew_query_core::{
+    Error, Key, QueryChangeEvent, QueryKey, QueryObserver, QueryOptions, QueryState,
+};
 
 /// Options for a `use_query`.
 pub struct UseQueryOptions<Fut, T, E>
@@ -21,6 +25,7 @@ where
     refetch_on_mount: bool,
     refetch_on_reconnect: bool,
     refetch_on_window_focus: bool,
+    options: Option<QueryOptions>,
 }
 
 impl<Fut, T, E> UseQueryOptions<Fut, T, E>
@@ -45,6 +50,7 @@ where
             refetch_on_mount: true,
             refetch_on_reconnect: true,
             refetch_on_window_focus: true,
+            options: None,
         }
     }
 
@@ -55,6 +61,33 @@ where
         F: Fn() -> Fut + 'static,
     {
         Self::new_abortable(key, move |_| fetch())
+    }
+
+    /// Sets the cache duration for this specific query.
+    pub fn cache_time(mut self, cache_time: Duration) -> Self {
+        self.options.get_or_insert_with(Default::default);
+        self.options.update(move |opts| opts.cache_time(cache_time));
+
+        self
+    }
+
+    /// Sets the refetch time interval for this specific query.
+    pub fn refetch_time(mut self, refetch_time: Duration) -> Self {
+        self.options.get_or_insert_with(Default::default);
+        self.options
+            .update(move |opts| opts.refetch_time(refetch_time));
+        self
+    }
+
+    /// Sets the function used to retry on failure.
+    pub fn retry<F, I>(mut self, retry: F) -> Self
+    where
+        F: Fn() -> I + 'static,
+        I: Iterator<Item = Duration> + 'static,
+    {
+        self.options.get_or_insert_with(Default::default);
+        self.options.update(move |opts| opts.retry(retry));
+        self
     }
 
     /// Sets a value for enable for disable this query.
@@ -193,15 +226,16 @@ where
         refetch_on_mount,
         refetch_on_reconnect,
         refetch_on_window_focus,
+        options,
     } = options;
 
     let client = use_query_client().expect("expected QueryClient");
     let abort_controller = use_abort_controller();
-    let observer = QueryObserver::<T>::new(client.clone(), key.clone());
+    let observer = QueryObserver::<T>::with_options(client.clone(), key.clone(), options);
     let first_render = use_is_first_render();
     let query_key = QueryKey::of::<T>(key.clone());
     let query_fetching = use_state(|| false);
-    
+
     let query_state = {
         let last_state = observer.get_last_state();
         use_state(|| last_state.unwrap_or(QueryState::Idle))
