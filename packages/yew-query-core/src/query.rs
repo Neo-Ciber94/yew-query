@@ -233,9 +233,8 @@ impl Query {
                 let this = this.clone();
 
                 spawn_local(async move {
-                    let mut this = this.clone();
-
                     // We fetch and ignore the errors, on failure the inner state will be updated
+                    let mut this = this.clone();
                     this.fetch::<T>().await.ok();
                 });
             });
