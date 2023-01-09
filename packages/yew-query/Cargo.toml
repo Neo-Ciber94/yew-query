@@ -12,6 +12,8 @@ yew = "0.20"
 futures = "0.3.25"
 wasm-bindgen = "0.2.83"
 wasm-bindgen-futures = "0.4.33"
+
+# TODO: Add logging as a feature
 log = "0.4.17"
 
 [dependencies.web-sys]

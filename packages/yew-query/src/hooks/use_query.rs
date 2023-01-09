@@ -339,14 +339,11 @@ where
     // First fetch
     {
         let do_fetch = do_fetch.clone();
-        let key = key.clone();
         use_effect_with_deps(
             move |_| {
-                log::trace!("fetching: {key}");
                 do_fetch.emit(());
 
                 move || {
-                    log::trace!("unmount");
                     abort_controller.abort();
                 }
             },
@@ -357,12 +354,9 @@ where
     // On mount
     {
         let do_fetch = do_fetch.clone();
-        let key = key.clone();
-
         use_effect_with_deps(
             move |_| {
                 if !first_render && refetch_on_mount {
-                    log::trace!("refetching on mount: {key}");
                     do_fetch.emit(());
                 }
             },
@@ -373,11 +367,8 @@ where
     // On online
     {
         let do_fetch = do_fetch.clone();
-        let key = key.clone();
-
         use_on_online(move || {
             if refetch_on_reconnect {
-                log::trace!("refetch on reconnect: {key}");
                 do_fetch.emit(());
             }
         });
@@ -386,11 +377,8 @@ where
     // On window focus
     {
         let do_fetch = do_fetch.clone();
-        let key = key.clone();
-
         use_on_window_focus(move || {
             if refetch_on_window_focus {
-                log::trace!("refetch on window focus: {key}");
                 do_fetch.emit(());
             }
         });
