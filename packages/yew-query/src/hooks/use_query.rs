@@ -174,6 +174,11 @@ impl<T> UseQueryHandle<T> {
         matches!(self.state(), QueryState::Ready)
     }
 
+    /// Returns `true` if the query finished with either an error or value.
+    pub fn is_completed(&self) -> bool {
+        self.is_ready() || self.is_error()
+    }
+
     /// Refetch ths data.
     pub fn refetch(&self) {
         self.fetch.emit(());
