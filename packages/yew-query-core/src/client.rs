@@ -323,11 +323,14 @@ where
         return ret;
     }
 
-    if let Some(retrier) = retrier {
-        let retry = retrier.get();
-        for delay in retry {
+    if let Some(retry) = retrier {
+        let iter = retry.get();
+        for delay in iter {
             prokio::time::sleep(delay).await;
             ret = fetcher.get().await;
+            if ret.is_ok() {
+                return ret;
+            }
         }
     }
 

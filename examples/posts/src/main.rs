@@ -22,7 +22,9 @@ pub struct Post {
 fn PostList() -> Html {
     let query = use_query("posts", fetch_posts);
 
-    if query.is_loading() {
+    log::trace!("{:?}", query.state());
+
+    if query.is_loading() || query.data().is_none() {
         return html! {
             "Loading..."
         };
@@ -34,7 +36,7 @@ fn PostList() -> Html {
         };
     }
 
-    let posts = query.data().cloned().unwrap_or_default();
+    let posts = query.data().cloned().unwrap();
 
     html! {
         <ul style="list-style-type: none;">

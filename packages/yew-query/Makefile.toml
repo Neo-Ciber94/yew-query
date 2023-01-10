@@ -1,0 +1,3 @@
+[tasks.wasm_test]
+command = "wasm-pack"
+args = ["test", "--headless", "--chrome"]

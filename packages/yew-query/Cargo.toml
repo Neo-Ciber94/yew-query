@@ -8,7 +8,7 @@ edition = "2021"
 
 [dependencies]
 yew-query-core = { path = "../yew-query-core" }
-yew = "0.20"
+yew = { version = "0.20", features = ["csr"] }
 futures = "0.3.25"
 wasm-bindgen = "0.2.83"
 wasm-bindgen-futures = "0.4.33"
@@ -23,3 +23,7 @@ features = ["AbortController", "AbortSignal", "Navigator"]
 [dependencies.instant]
 version = "0.1"
 features = ["wasm-bindgen", "inaccurate"]
+
+[dev-dependencies]
+wasm-bindgen-test = "0.3"
+gloo-utils = "0.1.6"

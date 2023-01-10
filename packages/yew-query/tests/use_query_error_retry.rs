@@ -5,7 +5,12 @@ wasm_bindgen_test::wasm_bindgen_test_configure!(run_in_browser);
 mod common;
 
 use common::*;
-use std::{time::Duration, fmt::{Display, self}, sync::atomic::{Ordering, AtomicU32}};
+use std::{
+    fmt::{self, Display},
+    rc::Rc,
+    sync::atomic::{AtomicU32, Ordering},
+    time::Duration, cell::Cell,
+};
 use wasm_bindgen_test::wasm_bindgen_test;
 use yew::{platform::time::sleep, prelude::*};
 use yew_query::{use_query, QueryClient, QueryClientProvider};
@@ -19,21 +24,48 @@ impl Display for NoValueError {
     }
 }
 
+#[derive(Default, Clone)]
+struct Counter(Rc<Cell<u32>>);
+impl Counter {
+    fn increment(&self) {
+        self.0.set(self.0.get() + 1);
+    }
+
+    fn get(&self) -> u32 {
+        self.0.get()
+    }
+}
+
+impl PartialEq for Counter {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.get() == other.0.get()
+    }
+}
+
+#[derive(Properties, PartialEq)]
+struct AppTestProps {
+    retry_count: Counter,
+}
+
 #[derive(Properties, PartialEq)]
 struct UseQueryComponentProps {
-    retry_count: UseStateHandle<u32>
+    retry_count: UseStateHandle<Counter>,
 }
 
 #[yew::function_component]
-fn AppTest() -> yew::Html {
-    let retry_count = use_state(|| 0);
+fn AppTest(props: &AppTestProps) -> yew::Html {
+    let retry_count = {
+        let count = props.retry_count.clone();
+        use_state(|| count)
+    };
+
     let client = QueryClient::builder()
         .retry({
             let retry_count = retry_count.clone();
             move || {
                 let retry_count = retry_count.clone();
                 std::iter::repeat(Duration::from_millis(10)).inspect(move |_| {
-                    retry_count.set(*retry_count + 1);
+                    retry_count.increment();
                 })
             }
         })
@@ -46,15 +78,13 @@ fn AppTest() -> yew::Html {
     }
 }
 
-static COUNT: AtomicU32 = AtomicU32::new(0);
-
 #[yew::function_component]
 fn UseQueryComponent(props: &UseQueryComponentProps) -> yew::Html {
+    static COUNT: AtomicU32 = AtomicU32::new(0);
 
-
-    let query =  use_query("number", || async move {
-        let count = COUNT.fetch_add(1, Ordering::Relaxed) + 1;
-        if count == 3 {
+    let query = use_query("number", || async move {
+        let val = COUNT.fetch_add(1, Ordering::Relaxed) + 1;
+        if val == 4 {
             Ok(69420)
         } else {
             Err(NoValueError)
@@ -63,7 +93,7 @@ fn UseQueryComponent(props: &UseQueryComponentProps) -> yew::Html {
 
     if query.is_error() {
         return yew::html! {
-            <div id="error">{format!("{}", query.error().unwrap())}</div>
+            <div id="result">{format!("{}", query.error().unwrap())}</div>
         };
     }
 
@@ -71,7 +101,7 @@ fn UseQueryComponent(props: &UseQueryComponentProps) -> yew::Html {
         return yew::html! { <div id="result">{"Loading..."}</div> };
     }
 
-    let retry_count = *props.retry_count;
+    let retry_count = props.retry_count.get();
     yew::html! {
         <>
             <div id="result">{ query.data().unwrap()  }</div>
@@ -82,8 +112,13 @@ fn UseQueryComponent(props: &UseQueryComponentProps) -> yew::Html {
 
 #[wasm_bindgen_test]
 async fn use_query_error_retry() {
-    yew::Renderer::<AppTest>::with_root(
+    let props = AppTestProps {
+        retry_count: Default::default(),
+    };
+
+    yew::Renderer::<AppTest>::with_root_and_props(
         gloo_utils::document().get_element_by_id("output").unwrap(),
+        props,
     )
     .render();
 
@@ -92,6 +127,6 @@ async fn use_query_error_retry() {
     let result = get_inner_html("result");
     let retry_count = get_inner_html("retry_count");
 
-    assert_eq!("3", retry_count);
     assert_eq!("69420", result);
+    assert_eq!("3", retry_count);
 }
