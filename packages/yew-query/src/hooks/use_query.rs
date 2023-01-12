@@ -7,7 +7,9 @@ use futures::Future;
 use instant::Duration;
 use std::rc::Rc;
 use web_sys::AbortSignal;
-use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle};
+use yew::{
+    hook, use_callback, use_effect, use_effect_with_deps, use_state, Callback, UseStateHandle,
+};
 use yew_query_core::{
     Error, Key, QueryChangeEvent, QueryKey, QueryObserver, QueryOptions, QueryState,
 };
@@ -354,35 +356,22 @@ where
         );
     }
 
-    // First fetch
-    {
-        let do_fetch = do_fetch.clone();
-        use_effect_with_deps(
-            move |_| {
-                do_fetch.emit(());
-
-                move || {
-                    abort_controller.abort();
-                }
-            },
-            (),
-        );
-    }
-
     // On mount
     {
         let do_fetch = do_fetch.clone();
-        use_effect_with_deps(
-            move |_| {
-                if !first_render && refetch_on_mount {
-                    do_fetch.emit(());
-                }
-            },
-            (),
-        )
+
+        use_effect(move || {
+            if first_render || refetch_on_mount {
+                do_fetch.emit(());
+            }
+
+            move || {
+                abort_controller.abort();
+            }
+        });
     }
 
-    // On online
+    // On reconnect
     {
         let do_fetch = do_fetch.clone();
         use_on_online(move || {
