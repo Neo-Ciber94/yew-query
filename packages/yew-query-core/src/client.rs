@@ -95,16 +95,14 @@ impl QueryClient {
             .options
             .refetch_time
             .or(options.as_ref().and_then(|x| x.refetch_time));
-        let retry = self
+        let retrier = self
             .options
             .retry
             .clone()
             .or_else(|| options.as_ref().and_then(|x| x.retry.clone()));
 
-        let can_cache = cache_time.is_some();
-        let retrier = retry.clone();
-
         // Only store the result in the cache if had stale time
+        let can_cache = cache_time.is_some();
         if !can_cache {
             let ret = fetch_with_retry(f, retrier).await?;
             return Ok(Rc::new(ret));
@@ -115,7 +113,7 @@ impl QueryClient {
             match cache.get(&key).cloned() {
                 Some(x) => x,
                 None => {
-                    let query = Query::new(f, retrier.clone(), cache_time, refetch_time);
+                    let query = Query::new(f, retrier, cache_time, refetch_time);
                     cache.set(key.clone(), query.clone());
 
                     query

@@ -282,9 +282,9 @@ dependencies = [
 
 [[package]]
 name = "gloo-timers"
-version = "0.2.4"
+version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5fb7d06c1c8cc2a29bee7ec961009a0b2caa0793ee4900c2ffb348734ba1c8f9"
+checksum = "98c4a8d6391675c6b2ee1a6c8d06e8e2d03605c44cec1270675985a4c2a5500b"
 dependencies = [
  "js-sys",
  "wasm-bindgen",
@@ -818,6 +818,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm-logger"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "074649a66bb306c8f2068c9016395fa65d8e08d2affcbf95acf3c24c3ab19718"
+dependencies = [
+ "log",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "web-sys"
 version = "0.3.60"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -929,12 +940,14 @@ name = "yew-query"
 version = "0.1.0-alpha"
 dependencies = [
  "futures",
+ "gloo-timers",
  "gloo-utils",
  "instant",
  "log",
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "wasm-bindgen-test",
+ "wasm-logger",
  "web-sys",
  "yew",
  "yew-query-core",
@@ -946,6 +959,7 @@ version = "0.1.0-alpha"
 dependencies = [
  "futures",
  "instant",
+ "log",
  "prokio",
  "tokio",
  "wasm-bindgen",

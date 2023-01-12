@@ -35,7 +35,7 @@ fn UseQueryComponent() -> yew::Html {
 }
 
 #[wasm_bindgen_test]
-async fn use_query_get_value_test() {
+async fn use_query_expect_value() {
     yew::Renderer::<AppTest>::with_root(
         gloo_utils::document().get_element_by_id("output").unwrap(),
     )

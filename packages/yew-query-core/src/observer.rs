@@ -50,10 +50,16 @@ where
         }
     }
 
-    /// Returns true if is fetching.
+    /// Returns `true` if is fetching.
     pub fn is_fetching(&self) -> bool {
         let key = &self.key;
         self.client.is_fetching(key)
+    }
+
+    /// Returns `true` if the query is stale.
+    pub fn is_stale(&self) -> bool {
+        let key = &self.key;
+        self.client.is_stale(key)
     }
 
     /// Returns the last value emitted.

@@ -8,7 +8,7 @@ use instant::Duration;
 use std::rc::Rc;
 use web_sys::AbortSignal;
 use yew::{
-    hook, use_callback, use_effect, use_effect_with_deps, use_state, Callback, UseStateHandle,
+    hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle,
 };
 use yew_query_core::{
     Error, Key, QueryChangeEvent, QueryKey, QueryObserver, QueryOptions, QueryState,
@@ -251,7 +251,8 @@ where
 
     let client = use_query_client().expect("expected QueryClient");
     let abort_controller = use_abort_controller();
-    let observer = QueryObserver::<T>::with_options(client.clone(), key.clone(), options);
+    let observer =
+        use_state(|| QueryObserver::<T>::with_options(client.clone(), key.clone(), options));
     let first_render = use_is_first_render();
     let query_key = QueryKey::of::<T>(key.clone());
 
@@ -273,10 +274,11 @@ where
     // We use an id to ensure only set the last value
     // https://docs.rs/yew/0.20.0/src/yew/suspense/hooks.rs.html#97
     let latest_id = use_state(|| std::cell::Cell::new(0_u32));
+    let is_stale = observer.is_stale();
 
     let do_fetch = {
-        let query_value = query_value.clone();
         let query_state = query_state.clone();
+        let query_value = query_value.clone();
         let query_fetching = query_fetching.clone();
         let fetch = fetch.clone();
         let latest_id = latest_id.clone();
@@ -285,6 +287,7 @@ where
         use_callback(
             move |(), deps| {
                 let enabled = deps.0;
+
                 let self_id = latest_id.get().wrapping_add(1);
                 (*latest_id).set(self_id);
 
@@ -360,7 +363,7 @@ where
     {
         let do_fetch = do_fetch.clone();
 
-        use_effect(move || {
+        use_effect_with_deps(move |_| {
             if first_render || refetch_on_mount {
                 do_fetch.emit(());
             }
@@ -368,7 +371,7 @@ where
             move || {
                 abort_controller.abort();
             }
-        });
+        }, (is_stale,));
     }
 
     // On reconnect

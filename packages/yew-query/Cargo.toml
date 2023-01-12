@@ -27,3 +27,5 @@ features = ["wasm-bindgen", "inaccurate"]
 [dev-dependencies]
 wasm-bindgen-test = "0.3"
 gloo-utils = "0.1.6"
+gloo-timers = "0.2.5"
+wasm-logger = "0.2.0"
