@@ -120,7 +120,7 @@ pub struct UseQueryHandle<T> {
     key: QueryKey,
     fetch: Callback<()>,
     remove: Callback<()>,
-    is_fetching: bool,
+    is_fetching: UseStateHandle<bool>,
     state: UseStateHandle<QueryState>,
     value: UseStateHandle<Option<Rc<T>>>,
 }
@@ -161,7 +161,7 @@ impl<T> UseQueryHandle<T> {
 
     /// Returns `true` if is fetching data.
     pub fn is_fetching(&self) -> bool {
-        self.is_fetching
+        *self.is_fetching
     }
 
     /// Returns `true` if has an error.
@@ -187,6 +187,19 @@ impl<T> UseQueryHandle<T> {
     /// Removes the query data.
     pub fn remove(&self) {
         self.remove.emit(());
+    }
+}
+
+impl<T> Clone for UseQueryHandle<T> {
+    fn clone(&self) -> Self {
+        Self {
+            key: self.key.clone(),
+            fetch: self.fetch.clone(),
+            remove: self.remove.clone(),
+            is_fetching: self.is_fetching.clone(),
+            state: self.state.clone(),
+            value: self.value.clone(),
+        }
     }
 }
 
@@ -397,6 +410,6 @@ where
         fetch: do_fetch,
         state: query_state,
         value: query_value,
-        is_fetching: *query_fetching,
+        is_fetching: query_fetching,
     }
 }
