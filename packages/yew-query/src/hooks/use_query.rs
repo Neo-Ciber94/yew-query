@@ -1,15 +1,13 @@
 use super::use_query_client;
 use crate::{
     common::{use_abort_controller, use_is_first_render, use_on_online, use_on_window_focus},
-    utils::OptionExt,
+    utils::{id::Id, OptionExt},
 };
 use futures::Future;
 use instant::Duration;
 use std::rc::Rc;
 use web_sys::AbortSignal;
-use yew::{
-    hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle,
-};
+use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle, use_memo};
 use yew_query_core::{
     Error, Key, QueryChangeEvent, QueryKey, QueryObserver, QueryOptions, QueryState,
 };
@@ -119,6 +117,7 @@ where
 
 /// Handle returned by `use_query`.
 pub struct UseQueryHandle<T> {
+    id: Id,
     key: QueryKey,
     fetch: Callback<()>,
     remove: Callback<()>,
@@ -128,6 +127,10 @@ pub struct UseQueryHandle<T> {
 }
 
 impl<T> UseQueryHandle<T> {
+    pub fn id(&self) -> Id {
+        self.id
+    }
+
     /// Returns the currently available data.
     pub fn data(&self) -> Option<&T> {
         self.value.as_deref()
@@ -195,6 +198,7 @@ impl<T> UseQueryHandle<T> {
 impl<T> Clone for UseQueryHandle<T> {
     fn clone(&self) -> Self {
         Self {
+            id: self.id,
             key: self.key.clone(),
             fetch: self.fetch.clone(),
             remove: self.remove.clone(),
@@ -249,6 +253,7 @@ where
         options,
     } = options;
 
+    let id = *use_memo(|_| Id::next(), ());
     let client = use_query_client().expect("expected QueryClient");
     let abort_controller = use_abort_controller();
     let observer =
@@ -287,15 +292,15 @@ where
         use_callback(
             move |(), deps| {
                 let enabled = deps.0;
-
+                
                 let self_id = latest_id.get().wrapping_add(1);
                 (*latest_id).set(self_id);
-
+                
                 let query_value = query_value.clone();
                 let query_state = query_state.clone();
                 let query_fetching = query_fetching.clone();
                 let latest_id = latest_id.clone();
-
+                
                 let signal = abort_controller.signal();
                 let fetch = fetch.clone();
                 let f = move || fetch(signal.clone());
@@ -363,15 +368,18 @@ where
     {
         let do_fetch = do_fetch.clone();
 
-        use_effect_with_deps(move |_| {
-            if first_render || refetch_on_mount {
-                do_fetch.emit(());
-            }
+        use_effect_with_deps(
+            move |_| {
+                if first_render || refetch_on_mount {
+                    do_fetch.emit(());
+                }
 
-            move || {
-                abort_controller.abort();
-            }
-        }, (is_stale,));
+                move || {
+                    abort_controller.abort();
+                }
+            },
+            (is_stale,),
+        );
     }
 
     // On reconnect
@@ -397,6 +405,7 @@ where
     //
 
     UseQueryHandle {
+        id,
         key: query_key,
         remove,
         fetch: do_fetch,

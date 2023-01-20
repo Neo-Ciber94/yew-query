@@ -63,13 +63,13 @@ fn UseQueryComponent() -> yew::Html {
         };
     }
 
-    if query.is_loading() || query.data().is_none() {
+    if !query.is_completed() {
         return yew::html! { <div id="result">{"Loading..."}</div> };
     }
 
     yew::html! {
         <>
-            <div id="result">{ query.data().unwrap()  }</div>
+            <div id="result">{ query.data().unwrap() }</div>
         </>
     }
 }

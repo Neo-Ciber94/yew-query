@@ -151,6 +151,7 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             ),
         );
 
@@ -161,12 +162,19 @@ mod tests {
                 None,
                 None,
                 None,
+                None,
             ),
         );
 
         cache.set(
             QueryKey::of::<i32>("number"),
-            Query::new(|| async { Ok::<_, Infallible>(12_i32) }, None, None, None),
+            Query::new(
+                || async { Ok::<_, Infallible>(12_i32) },
+                None,
+                None,
+                None,
+                None,
+            ),
         );
 
         assert!(cache.has(&QueryKey::of::<String>("color")));
@@ -182,6 +190,7 @@ mod tests {
             QueryKey::of::<Vec<u32>>("number"),
             Query::new(
                 || async { Ok::<_, Infallible>(vec![1, 2, 3]) },
+                None,
                 None,
                 None,
                 None,

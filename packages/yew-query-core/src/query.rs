@@ -3,7 +3,7 @@ use crate::{
     client::fetch_with_retry, retry::Retry, state::QueryState, time::interval::Interval, Error,
 };
 use futures::{
-    future::{ready, LocalBoxFuture, Shared},
+    future::{ok, LocalBoxFuture, Shared},
     Future, FutureExt, TryFutureExt,
 };
 use instant::Instant;
@@ -16,6 +16,37 @@ use std::{
     time::Duration,
 };
 
+#[derive(Clone)]
+struct OnQueryChangeHandler(Rc<dyn Fn(QueryChanged)>);
+impl Debug for OnQueryChangeHandler {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "OnQueryChangeHandler")
+    }
+}
+
+#[derive(Clone)]
+pub struct QueryChanged {
+    pub value: Option<Rc<dyn Any>>,
+    pub state: QueryState,
+    pub is_fetching: bool,
+}
+
+impl Debug for QueryChanged {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("QueryChanged")
+            .field("value", {
+                if self.value.is_none() {
+                    &"None"
+                } else {
+                    &"Some(Rc<dyn Any>)"
+                }
+            })
+            .field("state", &self.state)
+            .field("is_fetching", &self.is_fetching)
+            .finish()
+    }
+}
+
 #[derive(Debug)]
 struct Inner {
     fetcher: BoxFetcher<Rc<dyn Any>>,
@@ -27,6 +58,7 @@ struct Inner {
     future_or_value: Shared<LocalBoxFuture<'static, Result<Rc<dyn Any>, Error>>>,
     interval: Option<Interval>,
     state: QueryState,
+    on_change: Option<OnQueryChangeHandler>,
 }
 
 /// Represents a query.
@@ -43,6 +75,7 @@ impl Query {
         retrier: Option<Retry>,
         cache_time: Option<Duration>,
         refetch_time: Option<Duration>,
+        on_change: Option<Rc<dyn Fn(QueryChanged)>>,
     ) -> Self
     where
         F: Fn() -> Fut + 'static,
@@ -56,6 +89,16 @@ impl Query {
             .boxed_local()
             .shared();
 
+        if let Some(on_change) = &on_change {
+            on_change(QueryChanged {
+                value: None,
+                state: QueryState::Idle,
+                is_fetching: false,
+            });
+        }
+
+        let on_change = on_change.map(OnQueryChangeHandler);
+
         let inner = Arc::new(RwLock::new(Inner {
             fetcher,
             retrier,
@@ -66,6 +109,7 @@ impl Query {
             last_value: None,
             updated_at: None,
             interval: None,
+            on_change,
         }));
 
         Query { type_id, inner }
@@ -131,12 +175,16 @@ impl Query {
 
         // Only when is empty will be loading, otherwise may use the cache last value.
         if self.last_value().is_none() {
-            let mut inner = self.inner.write().expect("failed to write in query");
-            inner.state = QueryState::Loading;
+            self.on_change(QueryChanged {
+                is_fetching: true,
+                state: QueryState::Loading,
+                value: None,
+            });
         }
 
         let fut = {
             let mut inner = self.inner.write().expect("failed to write in query");
+
             let fetcher = inner.fetcher.clone();
             let retrier = inner.retrier.clone();
             let fut = fetch_with_retry(fetcher, retrier.clone())
@@ -145,6 +193,18 @@ impl Query {
 
             // Updates the inner future
             inner.future_or_value = fut.clone();
+            if inner.on_change.is_some() {
+                let value = inner.last_value.clone();
+                let state = inner.state.clone();
+                drop(inner);
+
+                self.notify(QueryChanged {
+                    is_fetching: true,
+                    state,
+                    value,
+                });
+            }
+
             fut
         };
 
@@ -152,8 +212,16 @@ impl Query {
         let value = match fut.await {
             Ok(x) => x,
             Err(err) => {
-                let mut inner = self.inner.write().expect("failed to write in query");
-                inner.state = QueryState::Failed(err.clone());
+                let inner = self.inner.read().expect("failed to write in query");
+                let value = inner.last_value.clone();
+                drop(inner);
+
+                self.on_change(QueryChanged {
+                    is_fetching: false,
+                    state: QueryState::Failed(err.clone()),
+                    value,
+                });
+
                 return Err(err);
             }
         };
@@ -161,15 +229,15 @@ impl Query {
         // refetch
         self.queue_refetch::<T>();
 
-        let mut inner = self.inner.write().expect("failed to write in query");
-
         let ret = value
             .downcast::<T>()
             .map_err(|_| QueryError::type_mismatch::<T>())?;
 
-        inner.last_value = Some(ret.clone());
-        inner.updated_at = Some(Instant::now());
-        inner.state = QueryState::Ready;
+        self.on_change(QueryChanged {
+            is_fetching: false,
+            state: QueryState::Ready,
+            value: Some(ret.clone()),
+        });
 
         Ok(ret)
     }
@@ -198,24 +266,49 @@ impl Query {
     pub fn set_value<T: 'static>(&mut self, value: T) -> Result<(), QueryError> {
         self.assert_type::<T>()?;
 
-        let fut = ready(Ok(Rc::new(value) as Rc<dyn Any>))
-            .boxed_local()
-            .shared();
-
-        // SAFETY: Value always is Ok(T)
+        let fut = ok(Rc::new(value) as Rc<dyn Any>).boxed_local().shared();
         let value = futures::executor::block_on(fut.clone()).unwrap();
-
         {
             let mut inner = self.inner.write().expect("failed to write in query");
             inner.future_or_value = fut;
-            inner.state = QueryState::Ready;
-            inner.last_value = Some(value);
-            inner.updated_at = Some(Instant::now());
         }
+
+        self.on_change(QueryChanged {
+            value: Some(value),
+            state: QueryState::Ready,
+            is_fetching: false,
+        });
 
         // refetch
         self.queue_refetch::<T>();
         Ok(())
+    }
+
+    fn send_event(&mut self, event: QueryChanged, notify_all: bool) {
+        let mut inner = self.inner.write().expect("failed to write in query");
+        if let Some(handler) = inner.on_change.as_ref() {
+            (handler.0)(event.clone())
+        }
+
+        if !notify_all {
+            return;
+        }
+
+        let QueryChanged { value, state, .. } = event;
+        if matches!(state, QueryState::Ready) {
+            inner.updated_at = Some(Instant::now());
+        }
+
+        inner.last_value = value;
+        inner.state = state;
+    }
+
+    fn on_change(&mut self, event: QueryChanged) {
+        self.send_event(event, true);
+    }
+
+    fn notify(&mut self, event: QueryChanged) {
+        self.send_event(event, true);
     }
 
     fn queue_refetch<T: 'static>(&self) {
@@ -229,6 +322,7 @@ impl Query {
             drop(inner); // We don't need to hold the ownership anymore
 
             let this = self.clone();
+
             let interval = Interval::new(refetch_time, move || {
                 let this = this.clone();
 
@@ -247,6 +341,10 @@ impl Query {
 
 impl Drop for Query {
     fn drop(&mut self) {
+        if Arc::strong_count(&self.inner) != 1 {
+            return;
+        }
+
         let mut inner = self.inner.write().unwrap();
         if let Some(interval) = inner.interval.take() {
             interval.cancel();

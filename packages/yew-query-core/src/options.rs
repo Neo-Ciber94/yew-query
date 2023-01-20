@@ -1,9 +1,8 @@
+use crate::retry::Retry;
 use instant::Duration;
 
-use crate::retry::Retry;
-
 /// Options for a query.
-#[derive(Default, Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct QueryOptions {
     pub(crate) cache_time: Option<Duration>,
     pub(crate) refetch_time: Option<Duration>,

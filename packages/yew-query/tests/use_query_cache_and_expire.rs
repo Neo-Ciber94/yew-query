@@ -68,8 +68,6 @@ fn UseQueryComponent() -> yew::Html {
 
 #[wasm_bindgen_test]
 async fn use_query_cache_and_expire() {
-    wasm_logger::init(wasm_logger::Config::new(log::Level::Trace));
-
     yew::Renderer::<AppTest>::with_root(
         gloo_utils::document().get_element_by_id("output").unwrap(),
     )

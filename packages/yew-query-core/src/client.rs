@@ -1,5 +1,5 @@
 use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retry, Error};
-use crate::{fetcher::Fetch, key::QueryKey, state::QueryState, QueryOptions};
+use crate::{fetcher::Fetch, key::QueryKey, state::QueryState, QueryChanged, QueryOptions};
 use std::{
     any::TypeId,
     cell::{Ref, RefCell},
@@ -65,6 +65,24 @@ impl QueryClient {
         T: 'static,
         E: Into<Error> + 'static,
     {
+        self.fetch_query_with_options_and_observe(key, f, options, None)
+            .await
+    }
+
+    /// Executes the future with the given `QueryOptions` then cache and returns the result while observing the state changes of the query.
+    pub async fn fetch_query_with_options_and_observe<F, Fut, T, E>(
+        &mut self,
+        key: QueryKey,
+        f: F,
+        options: Option<&QueryOptions>,
+        on_change: Option<Rc<dyn Fn(QueryChanged)>>,
+    ) -> Result<Rc<T>, Error>
+    where
+        F: Fn() -> Fut + 'static,
+        Fut: Future<Output = Result<T, E>> + 'static,
+        T: 'static,
+        E: Into<Error> + 'static,
+    {
         // If is fetching for the query still fresh in cache
         {
             let cache = self.cache.borrow();
@@ -102,20 +120,19 @@ impl QueryClient {
             .or_else(|| options.as_ref().and_then(|x| x.retry.clone()));
 
         // Only store the result in the cache if had stale time
-        let can_cache = cache_time.is_some();
-        if !can_cache {
-            let ret = fetch_with_retry(f, retrier).await?;
-            return Ok(Rc::new(ret));
-        }
+        // let can_cache = cache_time.is_some();
+        // if !can_cache {
+        //     let ret = fetch_with_retry(f, retrier).await?;
+        //     return Ok(Rc::new(ret));
+        // }
 
         let mut query = {
             let mut cache = self.cache.borrow_mut();
             match cache.get(&key).cloned() {
                 Some(x) => x,
                 None => {
-                    let query = Query::new(f, retrier, cache_time, refetch_time);
+                    let query = Query::new(f, retrier, cache_time, refetch_time, on_change);
                     cache.set(key.clone(), query.clone());
-
                     query
                 }
             }

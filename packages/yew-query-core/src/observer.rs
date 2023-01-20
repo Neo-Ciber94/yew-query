@@ -6,7 +6,7 @@ use crate::{
     client::QueryClient,
     key::{Key, QueryKey},
     state::QueryState,
-    Error, QueryOptions,
+    Error, QueryChanged, QueryOptions,
 };
 
 /// An event emitted when executing a query.
@@ -88,7 +88,7 @@ where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
         E: Into<Error> + 'static,
-        C: Fn(QueryChangeEvent<T>) + 'static,
+        C: Fn(QueryChangeEvent<T>) + Clone + 'static,
     {
         let key = &self.key;
 
@@ -113,30 +113,43 @@ where
         spawn_local(async move {
             let mut client = client;
 
-            // If the query don't exists we are loading
-            if !client.contains_query(&key) {
-                callback(QueryChangeEvent {
-                    state: QueryState::Loading,
-                    is_fetching: true,
-                    value: None,
-                });
-            }
+            let on_change = {
+                let callback = callback.clone();
+                move |event: QueryChanged| {
+                    let value = event.value.map(|x| x.downcast::<T>().unwrap());
+                    callback(QueryChangeEvent {
+                        state: event.state,
+                        is_fetching: event.is_fetching,
+                        value,
+                    });
+                }
+            };
 
+            let is_cached = !client.is_stale(&key);
             let ret = client
-                .fetch_query_with_options(key, fetch, options.as_ref())
+                .fetch_query_with_options_and_observe(
+                    key,
+                    fetch,
+                    options.as_ref(),
+                    Some(Rc::new(on_change)),
+                )
                 .await;
 
-            match ret {
-                Ok(value) => callback(QueryChangeEvent {
-                    state: QueryState::Ready,
-                    is_fetching: false,
-                    value: Some(value),
-                }),
-                Err(err) => callback(QueryChangeEvent {
-                    state: QueryState::Failed(err.into()),
-                    is_fetching: false,
-                    value: None,
-                }),
+            // The `Query` will notify each state change, but while cache we will not receive any updates,
+            // in that cache we notify the current state of the query from the observer
+            if is_cached {
+                match ret {
+                    Ok(value) => callback(QueryChangeEvent {
+                        state: QueryState::Ready,
+                        is_fetching: false,
+                        value: Some(value),
+                    }),
+                    Err(err) => callback(QueryChangeEvent {
+                        state: QueryState::Failed(err.into()),
+                        is_fetching: false,
+                        value: None,
+                    }),
+                }
             }
         });
     }

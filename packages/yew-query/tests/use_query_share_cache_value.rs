@@ -6,7 +6,10 @@ mod common;
 
 use common::*;
 use instant::Duration;
-use std::{convert::Infallible, sync::atomic::{AtomicU32, Ordering}};
+use std::{
+    convert::Infallible,
+    sync::atomic::{AtomicU32, Ordering},
+};
 use wasm_bindgen_test::wasm_bindgen_test;
 use yew::platform::time::sleep;
 use yew_query::{use_query, QueryClient, QueryClientProvider};
@@ -26,11 +29,11 @@ fn AppTest() -> yew::Html {
     }
 }
 
-static FETCH_COUNT : AtomicU32 = AtomicU32::new(0);
+static FETCH_COUNT: AtomicU32 = AtomicU32::new(0);
 
 async fn get_value() -> Result<i32, Infallible> {
     FETCH_COUNT.fetch_add(1, Ordering::Relaxed);
-    sleep(Duration::from_millis(100)).await;
+    sleep(Duration::from_millis(20)).await;
     Ok::<_, Infallible>(9000_i32)
 }
 
@@ -80,7 +83,7 @@ async fn use_query_share_cache_value() {
     )
     .render();
 
-    sleep(std::time::Duration::from_millis(300)).await;
+    sleep(std::time::Duration::from_millis(200)).await;
 
     assert_eq!(1, FETCH_COUNT.load(Ordering::Relaxed));
 

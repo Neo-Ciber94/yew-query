@@ -74,10 +74,10 @@ mod atomic {
             F: Fn() + 'static,
         {
             let cancel = Arc::new(AtomicBool::new(false));
-
+            
             spawn_local({
                 let cancel = cancel.clone();
-
+                
                 async move {
                     while !cancel.load(Ordering::SeqCst) {
                         prokio::time::sleep(duration).await;
