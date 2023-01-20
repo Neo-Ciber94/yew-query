@@ -960,6 +960,7 @@ dependencies = [
  "futures",
  "instant",
  "log",
+ "pin-project-lite",
  "prokio",
  "tokio",
  "wasm-bindgen",

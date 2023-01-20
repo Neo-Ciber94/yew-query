@@ -9,7 +9,7 @@ use std::rc::Rc;
 use web_sys::AbortSignal;
 use yew::{hook, use_callback, use_effect_with_deps, use_state, Callback, UseStateHandle, use_memo};
 use yew_query_core::{
-    Error, Key, QueryChangeEvent, QueryKey, QueryObserver, QueryOptions, QueryState,
+    Error, Key, QueryChangeEvent, QueryKey, QueryObserver, QueryOptions, QueryState, ObserveTarget,
 };
 
 /// Options for a `use_query`.
@@ -119,7 +119,7 @@ where
 pub struct UseQueryHandle<T> {
     id: Id,
     key: QueryKey,
-    fetch: Callback<()>,
+    fetch: Callback<ObserveTarget>,
     remove: Callback<()>,
     is_fetching: UseStateHandle<bool>,
     state: UseStateHandle<QueryState>,
@@ -186,7 +186,7 @@ impl<T> UseQueryHandle<T> {
 
     /// Refetch ths data.
     pub fn refetch(&self) {
-        self.fetch.emit(());
+        self.fetch.emit(ObserveTarget::Refetch);
     }
 
     /// Removes the query data.
@@ -290,7 +290,7 @@ where
         let abort_controller = abort_controller.clone();
 
         use_callback(
-            move |(), deps| {
+            move |target, deps| {
                 let enabled = deps.0;
                 
                 let self_id = latest_id.get().wrapping_add(1);
@@ -305,7 +305,7 @@ where
                 let fetch = fetch.clone();
                 let f = move || fetch(signal.clone());
 
-                observer.observe(f, move |event| {
+                observer.observe(target, f, move |event| {
                     if !enabled {
                         return;
                     }
@@ -371,7 +371,7 @@ where
         use_effect_with_deps(
             move |_| {
                 if first_render || refetch_on_mount {
-                    do_fetch.emit(());
+                    do_fetch.emit(ObserveTarget::Fetch);
                 }
 
                 move || {
@@ -387,7 +387,7 @@ where
         let do_fetch = do_fetch.clone();
         use_on_online(move || {
             if refetch_on_reconnect {
-                do_fetch.emit(());
+                do_fetch.emit(ObserveTarget::Refetch);
             }
         });
     }
@@ -397,7 +397,7 @@ where
         let do_fetch = do_fetch.clone();
         use_on_window_focus(move || {
             if refetch_on_window_focus {
-                do_fetch.emit(());
+                do_fetch.emit(ObserveTarget::Refetch);
             }
         });
     }

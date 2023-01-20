@@ -18,3 +18,4 @@ pub use error::Error;
 
 //
 pub(crate) mod time;
+pub(crate) mod futures;

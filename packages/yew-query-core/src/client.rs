@@ -1,5 +1,7 @@
+
+
 use super::{cache::QueryCache, error::QueryError, query::Query, retry::Retry, Error};
-use crate::{fetcher::Fetch, key::QueryKey, state::QueryState, QueryChanged, QueryOptions};
+use crate::{fetcher::Fetch, key::QueryKey, state::QueryState, QueryChanged, QueryOptions, futures::query::QueryFuture};
 use std::{
     any::TypeId,
     cell::{Ref, RefCell},
@@ -120,11 +122,12 @@ impl QueryClient {
             .or_else(|| options.as_ref().and_then(|x| x.retry.clone()));
 
         // Only store the result in the cache if had stale time
-        // let can_cache = cache_time.is_some();
-        // if !can_cache {
-        //     let ret = fetch_with_retry(f, retrier).await?;
-        //     return Ok(Rc::new(ret));
-        // }
+        let can_cache = cache_time.is_some();
+        if !can_cache {
+            let f = fetch_with_retry(f, retrier);
+            let ret = QueryFuture::new(f, on_change).await?;
+            return Ok(ret);
+        }
 
         let mut query = {
             let mut cache = self.cache.borrow_mut();

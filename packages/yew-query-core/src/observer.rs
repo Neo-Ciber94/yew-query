@@ -21,6 +21,12 @@ pub struct QueryChangeEvent<T> {
     pub value: Option<Rc<T>>,
 }
 
+#[derive(Debug)]
+pub enum ObserveTarget {
+    Fetch,
+    Refetch,
+}
+
 /// A mechanism for track the state of a query.
 pub struct QueryObserver<T> {
     client: QueryClient,
@@ -83,7 +89,7 @@ where
     }
 
     /// Adds a callback for observing the given query.
-    pub fn observe<F, Fut, E, C>(&self, fetch: F, callback: C)
+    pub fn observe<F, Fut, E, C>(&self, target: ObserveTarget, fetch: F, callback: C)
     where
         F: Fn() -> Fut + 'static,
         Fut: Future<Output = Result<T, E>> + 'static,
@@ -112,32 +118,37 @@ where
 
         spawn_local(async move {
             let mut client = client;
+            let should_update = !client.is_stale(&key) || matches!(target, ObserveTarget::Refetch);
 
-            let on_change = {
-                let callback = callback.clone();
-                move |event: QueryChanged| {
-                    let value = event.value.map(|x| x.downcast::<T>().unwrap());
-                    callback(QueryChangeEvent {
-                        state: event.state,
-                        is_fetching: event.is_fetching,
-                        value,
-                    });
+            let ret = match target {
+                ObserveTarget::Fetch => {
+                    let on_change = {
+                        let callback = callback.clone();
+                        move |event: QueryChanged| {
+                            let value = event.value.map(|x| x.downcast::<T>().unwrap());
+                            callback(QueryChangeEvent {
+                                state: event.state,
+                                is_fetching: event.is_fetching,
+                                value,
+                            });
+                        }
+                    };
+
+                    client
+                        .fetch_query_with_options_and_observe(
+                            key,
+                            fetch,
+                            options.as_ref(),
+                            Some(Rc::new(on_change)),
+                        )
+                        .await
                 }
+                ObserveTarget::Refetch => client.refetch_query(key).await,
             };
-
-            let is_cached = !client.is_stale(&key);
-            let ret = client
-                .fetch_query_with_options_and_observe(
-                    key,
-                    fetch,
-                    options.as_ref(),
-                    Some(Rc::new(on_change)),
-                )
-                .await;
 
             // The `Query` will notify each state change, but while cache we will not receive any updates,
             // in that cache we notify the current state of the query from the observer
-            if is_cached {
+            if should_update {
                 match ret {
                     Ok(value) => callback(QueryChangeEvent {
                         state: QueryState::Ready,
